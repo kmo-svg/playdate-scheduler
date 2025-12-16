@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Users } from 'lucide-react';
 
 const App = () => {
-  const [parentName, setParentName] = useState('');
-  const [parents, setParents] = useState([]);
-  const [currentParent, setCurrentParent] = useState(null);
+  const [childName, setChildName] = useState('');
+  const [children, setChildren] = useState([]);
+  const [currentChild, setCurrentChild] = useState(null);
   const [showNameInput, setShowNameInput] = useState(true);
 
   const generateTimeSlots = () => {
@@ -27,69 +27,70 @@ const App = () => {
   const timeSlots = generateTimeSlots();
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-  const addParent = () => {
-    if (parentName.trim()) {
-      const newParent = {
+  const addChild = () => {
+    if (childName.trim()) {
+      const newChild = {
         id: Date.now(),
-        name: parentName.trim(),
+        name: childName.trim(),
         availability: {}
       };
-      setParents([...parents, newParent]);
-      setCurrentParent(newParent);
-      setParentName('');
+      setChildren([...children, newChild]);
+      setCurrentChild(newChild);
+      setChildName('');
       setShowNameInput(false);
     }
   };
 
   const toggleSlot = (day, time) => {
-    if (!currentParent) return;
+    if (!currentChild) return;
     
-    setParents(parents.map(p => {
-      if (p.id === currentParent.id) {
+    setChildren(children.map(c => {
+      if (c.id === currentChild.id) {
         const key = `${day}-${time}`;
-        const newAvailability = { ...p.availability };
+        const newAvailability = { ...c.availability };
         if (newAvailability[key]) {
           delete newAvailability[key];
         } else {
           newAvailability[key] = true;
         }
-        return { ...p, availability: newAvailability };
+        return { ...c, availability: newAvailability };
       }
-      return p;
+      return c;
     }));
   };
 
-  const getSlotCount = (day, time) => {
+  const getAvailableChildren = (day, time) => {
     const key = `${day}-${time}`;
-    return parents.filter(p => p.availability[key]).length;
+    return children.filter(c => c.availability[key]);
   };
 
   const getSlotColor = (day, time) => {
-    const count = getSlotCount(day, time);
-    if (count === 0) return 'bg-gray-100';
-    if (count === parents.length) return 'bg-green-500';
-    if (count >= parents.length * 0.7) return 'bg-green-400';
-    if (count >= parents.length * 0.5) return 'bg-yellow-400';
-    return 'bg-orange-400';
+    const availableKids = getAvailableChildren(day, time);
+    return availableKids.length > 0 ? 'bg-green-400' : 'bg-gray-100';
   };
 
-  const isCurrentParentAvailable = (day, time) => {
-    if (!currentParent) return false;
+  const isCurrentChildAvailable = (day, time) => {
+    if (!currentChild) return false;
     const key = `${day}-${time}`;
-    return currentParent.availability[key];
+    return currentChild.availability[key];
   };
 
-  const switchParent = (parent) => {
-    setCurrentParent(parent);
+  const switchChild = (child) => {
+    setCurrentChild(child);
   };
 
   const getBestTimes = () => {
     const slotCounts = [];
     days.forEach(day => {
       timeSlots.forEach(slot => {
-        const count = getSlotCount(day, slot.time);
-        if (count > 0) {
-          slotCounts.push({ day, time: slot.display, count });
+        const availableKids = getAvailableChildren(day, slot.time);
+        if (availableKids.length > 0) {
+          slotCounts.push({ 
+            day, 
+            time: slot.display, 
+            count: availableKids.length,
+            names: availableKids.map(k => k.name).join(', ')
+          });
         }
       });
     });
@@ -97,11 +98,11 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (parents.length > 0 && currentParent) {
-      const updated = parents.find(p => p.id === currentParent.id);
-      if (updated) setCurrentParent(updated);
+    if (children.length > 0 && currentChild) {
+      const updated = children.find(c => c.id === currentChild.id);
+      if (updated) setCurrentChild(updated);
     }
-  }, [parents]);
+  }, [children]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
@@ -115,21 +116,21 @@ const App = () => {
           <div className="mb-6 p-4 bg-purple-50 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-5 h-5 text-purple-600" />
-              <h2 className="text-lg font-semibold text-gray-800">Parents</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Children</h2>
             </div>
             
             {showNameInput ? (
               <div className="flex gap-2 mb-4">
                 <input
                   type="text"
-                  value={parentName}
-                  onChange={(e) => setParentName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addParent()}
-                  placeholder="Enter your name"
+                  value={childName}
+                  onChange={(e) => setChildName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addChild()}
+                  placeholder="Enter child's name"
                   className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
                 <button
-                  onClick={addParent}
+                  onClick={addChild}
                   className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
                 >
                   Add
@@ -140,58 +141,56 @@ const App = () => {
                 onClick={() => setShowNameInput(true)}
                 className="mb-4 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
               >
-                + Add Another Parent
+                + Add Another Child
               </button>
             )}
 
             <div className="flex flex-wrap gap-2">
-              {parents.map(parent => (
+              {children.map(child => (
                 <button
-                  key={parent.id}
-                  onClick={() => switchParent(parent)}
+                  key={child.id}
+                  onClick={() => switchChild(child)}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    currentParent?.id === parent.id
+                    currentChild?.id === child.id
                       ? 'bg-purple-600 text-white'
                       : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
                   }`}
                 >
-                  {parent.name}
+                  {child.name}
                 </button>
               ))}
             </div>
 
-            {currentParent && (
+            {currentChild && (
               <p className="mt-3 text-sm text-gray-600">
-                Currently editing: <span className="font-semibold">{currentParent.name}</span>
+                Currently editing: <span className="font-semibold">{currentChild.name}</span>
               </p>
             )}
           </div>
 
-          {parents.length > 0 && (
+          {children.length > 0 && (
             <div className="mb-6 p-4 bg-green-50 rounded-lg">
               <h3 className="font-semibold text-gray-800 mb-2">Top Available Times</h3>
               <div className="space-y-1">
                 {getBestTimes().map((slot, idx) => (
                   <div key={idx} className="text-sm text-gray-700">
-                    <span className="font-medium">{slot.day} {slot.time}</span> - {slot.count}/{parents.length} available
+                    <span className="font-medium">{slot.day} {slot.time}</span> - {slot.names}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {currentParent && (
+          {currentChild && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
-                Click on time slots below to mark when <strong>{currentParent.name}</strong> is available. 
-                Colors show how many parents are available: <span className="text-green-600 font-semibold">Green = Most</span>, 
-                <span className="text-yellow-600 font-semibold"> Yellow = Some</span>, 
-                <span className="text-orange-600 font-semibold"> Orange = Few</span>
+                Click on time slots below to mark when <strong>{currentChild.name}</strong> is available. 
+                Green slots show when at least one child is available. Hover over a slot to see names.
               </p>
             </div>
           )}
 
-          {currentParent ? (
+          {currentChild ? (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
@@ -200,7 +199,7 @@ const App = () => {
                       Time
                     </th>
                     {days.map(day => (
-                      <th key={day} className="p-2 text-center font-semibold text-gray-700 border-b-2 border-purple-300 min-w-[100px]">
+                      <th key={day} className="p-2 text-center font-semibold text-gray-700 border-b-2 border-purple-300 min-w-[120px]">
                         {day}
                       </th>
                     ))}
@@ -213,23 +212,25 @@ const App = () => {
                         {slot.display}
                       </td>
                       {days.map(day => {
-                        const available = isCurrentParentAvailable(day, slot.time);
+                        const available = isCurrentChildAvailable(day, slot.time);
                         const colorClass = getSlotColor(day, slot.time);
-                        const count = getSlotCount(day, slot.time);
+                        const availableKids = getAvailableChildren(day, slot.time);
+                        const kidNames = availableKids.map(k => k.name).join(', ');
                         
                         return (
                           <td key={day} className="p-1 border-b border-gray-200">
                             <button
                               onClick={() => toggleSlot(day, slot.time)}
-                              className={`w-full h-10 rounded transition-all ${
+                              title={kidNames || 'No children available'}
+                              className={`w-full min-h-12 rounded transition-all ${
                                 available
                                   ? 'ring-2 ring-purple-600 ring-offset-1'
                                   : ''
-                              } ${colorClass} hover:opacity-80 relative`}
+                              } ${colorClass} hover:opacity-80 relative p-1 flex items-center justify-center`}
                             >
-                              {count > 0 && (
-                                <span className="text-xs font-semibold text-gray-800">
-                                  {count}
+                              {availableKids.length > 0 && (
+                                <span className="text-xs font-medium text-gray-800 text-center leading-tight">
+                                  {kidNames}
                                 </span>
                               )}
                             </button>
@@ -244,7 +245,7 @@ const App = () => {
           ) : (
             <div className="text-center py-12 text-gray-500">
               <Users className="w-16 h-16 mx-auto mb-3 opacity-50" />
-              <p>Add a parent to get started!</p>
+              <p>Add a child to get started!</p>
             </div>
           )}
         </div>
