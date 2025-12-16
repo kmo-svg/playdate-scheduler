@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users } from 'lucide-react';
+import { Calendar, Users, Settings, X } from 'lucide-react';
 
 const App = () => {
   const [childName, setChildName] = useState('');
   const [children, setChildren] = useState([]);
   const [currentChild, setCurrentChild] = useState(null);
-  const [showNameInput, setShowNameInput] = useState(true);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [dateRange, setDateRange] = useState([]);
+  const [tempStartDate, setTempStartDate] = useState('');
+  const [tempEndDate, setTempEndDate] = useState('');
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -25,53 +30,117 @@ const App = () => {
   };
 
   const timeSlots = generateTimeSlots();
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-  const addChild = () => {
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load children
+      const childrenResult = await window.storage.get('playdate-children', true);
+      if (childrenResult) {
+        const loadedChildren = JSON.parse(childrenResult.value);
+        setChildren(loadedChildren);
+      }
+
+      // Load date range
+      const dateRangeResult = await window.storage.get('playdate-dates', true);
+      if (dateRangeResult) {
+        const dates = JSON.parse(dateRangeResult.value);
+        setDateRange(dates);
+      } else {
+        // Default to next 7 days
+        const today = new Date();
+        const dates = [];
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + i);
+          dates.push(date.toISOString().split('T')[0]);
+        }
+        setDateRange(dates);
+        await window.storage.set('playdate-dates', JSON.stringify(dates), true);
+      }
+    } catch (error) {
+      console.log('First time setup - no existing data');
+      // Set default date range for first time
+      const today = new Date();
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        dates.push(date.toISOString().split('T')[0]);
+      }
+      setDateRange(dates);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveChildren = async (updatedChildren) => {
+    try {
+      await window.storage.set('playdate-children', JSON.stringify(updatedChildren), true);
+    } catch (error) {
+      console.error('Error saving children:', error);
+      alert('Failed to save data. Please try again.');
+    }
+  };
+
+  const addChild = async () => {
     if (childName.trim()) {
       const newChild = {
         id: Date.now(),
         name: childName.trim(),
         availability: {}
       };
-      setChildren([...children, newChild]);
+      const updatedChildren = [...children, newChild];
+      setChildren(updatedChildren);
       setCurrentChild(newChild);
       setChildName('');
       setShowNameInput(false);
+      await saveChildren(updatedChildren);
     }
   };
 
-  const toggleSlot = (day, time) => {
+  const toggleSlot = async (date, time) => {
     if (!currentChild) return;
     
-    setChildren(children.map(c => {
+    const updatedChildren = children.map(c => {
       if (c.id === currentChild.id) {
-        const key = `${day}-${time}`;
+        const key = `${date}-${time}`;
         const newAvailability = { ...c.availability };
         if (newAvailability[key]) {
           delete newAvailability[key];
         } else {
           newAvailability[key] = true;
         }
-        return { ...c, availability: newAvailability };
+        const updated = { ...c, availability: newAvailability };
+        setCurrentChild(updated);
+        return updated;
       }
       return c;
-    }));
+    });
+    
+    setChildren(updatedChildren);
+    await saveChildren(updatedChildren);
   };
 
-  const getAvailableChildren = (day, time) => {
-    const key = `${day}-${time}`;
+  const getAvailableChildren = (date, time) => {
+    const key = `${date}-${time}`;
     return children.filter(c => c.availability[key]);
   };
 
-  const getSlotColor = (day, time) => {
-    const availableKids = getAvailableChildren(day, time);
+  const getSlotColor = (date, time) => {
+    const availableKids = getAvailableChildren(date, time);
     return availableKids.length > 0 ? 'bg-green-400' : 'bg-gray-100';
   };
 
-  const isCurrentChildAvailable = (day, time) => {
+  const isCurrentChildAvailable = (date, time) => {
     if (!currentChild) return false;
-    const key = `${day}-${time}`;
+    const key = `${date}-${time}`;
     return currentChild.availability[key];
   };
 
@@ -79,14 +148,19 @@ const App = () => {
     setCurrentChild(child);
   };
 
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   const getBestTimes = () => {
     const slotCounts = [];
-    days.forEach(day => {
+    dateRange.forEach(date => {
       timeSlots.forEach(slot => {
-        const availableKids = getAvailableChildren(day, slot.time);
+        const availableKids = getAvailableChildren(date, slot.time);
         if (availableKids.length > 0) {
           slotCounts.push({ 
-            day, 
+            date,
             time: slot.display, 
             count: availableKids.length,
             names: availableKids.map(k => k.name).join(', ')
@@ -97,21 +171,99 @@ const App = () => {
     return slotCounts.sort((a, b) => b.count - a.count).slice(0, 5);
   };
 
-  useEffect(() => {
-    if (children.length > 0 && currentChild) {
-      const updated = children.find(c => c.id === currentChild.id);
-      if (updated) setCurrentChild(updated);
+  const saveDateRange = async () => {
+    if (!tempStartDate || !tempEndDate) {
+      alert('Please select both start and end dates');
+      return;
     }
-  }, [children]);
+
+    const start = new Date(tempStartDate);
+    const end = new Date(tempEndDate);
+    
+    if (start > end) {
+      alert('Start date must be before end date');
+      return;
+    }
+
+    const dates = [];
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+
+    setDateRange(dates);
+    await window.storage.set('playdate-dates', JSON.stringify(dates), true);
+    setShowSettings(false);
+    setTempStartDate('');
+    setTempEndDate('');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Calendar className="w-8 h-8 text-purple-600" />
-            <h1 className="text-3xl font-bold text-gray-800">Play Date Scheduler</h1>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Calendar className="w-8 h-8 text-purple-600" />
+              <h1 className="text-3xl font-bold text-gray-800">Play Date Scheduler</h1>
+            </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-6 h-6 text-gray-600" />
+            </button>
           </div>
+
+          {/* Settings Modal */}
+          {showSettings && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-800">Date Range Settings</h2>
+                  <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-100 rounded">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={tempStartDate}
+                      onChange={(e) => setTempStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={tempEndDate}
+                      onChange={(e) => setTempEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <button
+                    onClick={saveDateRange}
+                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                  >
+                    Save Date Range
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mb-6 p-4 bg-purple-50 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
@@ -135,13 +287,19 @@ const App = () => {
                 >
                   Add
                 </button>
+                <button
+                  onClick={() => setShowNameInput(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <button
                 onClick={() => setShowNameInput(true)}
                 className="mb-4 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
               >
-                + Add Another Child
+                + Add Child
               </button>
             )}
 
@@ -168,13 +326,13 @@ const App = () => {
             )}
           </div>
 
-          {children.length > 0 && (
+          {children.length > 0 && getBestTimes().length > 0 && (
             <div className="mb-6 p-4 bg-green-50 rounded-lg">
               <h3 className="font-semibold text-gray-800 mb-2">Top Available Times</h3>
               <div className="space-y-1">
                 {getBestTimes().map((slot, idx) => (
                   <div key={idx} className="text-sm text-gray-700">
-                    <span className="font-medium">{slot.day} {slot.time}</span> - {slot.names}
+                    <span className="font-medium">{formatDate(slot.date)} {slot.time}</span> - {slot.names}
                   </div>
                 ))}
               </div>
@@ -198,9 +356,9 @@ const App = () => {
                     <th className="sticky left-0 bg-white p-2 text-left font-semibold text-gray-700 border-b-2 border-purple-300">
                       Time
                     </th>
-                    {days.map(day => (
-                      <th key={day} className="p-2 text-center font-semibold text-gray-700 border-b-2 border-purple-300 min-w-[120px]">
-                        {day}
+                    {dateRange.map(date => (
+                      <th key={date} className="p-2 text-center font-semibold text-gray-700 border-b-2 border-purple-300 min-w-[120px]">
+                        {formatDate(date)}
                       </th>
                     ))}
                   </tr>
@@ -211,16 +369,16 @@ const App = () => {
                       <td className="sticky left-0 bg-white p-2 text-sm font-medium text-gray-600 border-b border-gray-200">
                         {slot.display}
                       </td>
-                      {days.map(day => {
-                        const available = isCurrentChildAvailable(day, slot.time);
-                        const colorClass = getSlotColor(day, slot.time);
-                        const availableKids = getAvailableChildren(day, slot.time);
+                      {dateRange.map(date => {
+                        const available = isCurrentChildAvailable(date, slot.time);
+                        const colorClass = getSlotColor(date, slot.time);
+                        const availableKids = getAvailableChildren(date, slot.time);
                         const kidNames = availableKids.map(k => k.name).join(', ');
                         
                         return (
-                          <td key={day} className="p-1 border-b border-gray-200">
+                          <td key={date} className="p-1 border-b border-gray-200">
                             <button
-                              onClick={() => toggleSlot(day, slot.time)}
+                              onClick={() => toggleSlot(date, slot.time)}
                               title={kidNames || 'No children available'}
                               className={`w-full min-h-12 rounded transition-all ${
                                 available
