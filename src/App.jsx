@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Settings, X } from 'lucide-react';
+import { supabase } from './supabaseClient';
 
 const App = () => {
   const [childName, setChildName] = useState('');
@@ -31,9 +32,21 @@ const App = () => {
 
   const timeSlots = generateTimeSlots();
 
-  // Load data on mount
   useEffect(() => {
     loadData();
+    
+    // Subscribe to changes
+    const channel = supabase
+      .channel('playdate_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'playdate_data' },
+        () => loadData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadData = async () => {
@@ -41,17 +54,25 @@ const App = () => {
       setLoading(true);
       
       // Load children
-      const childrenResult = await window.storage.get('playdate-children', true);
-      if (childrenResult) {
-        const loadedChildren = JSON.parse(childrenResult.value);
-        setChildren(loadedChildren);
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('playdate_data')
+        .select('value')
+        .eq('key', 'children')
+        .single();
+
+      if (!childrenError && childrenData) {
+        setChildren(JSON.parse(childrenData.value));
       }
 
       // Load date range
-      const dateRangeResult = await window.storage.get('playdate-dates', true);
-      if (dateRangeResult) {
-        const dates = JSON.parse(dateRangeResult.value);
-        setDateRange(dates);
+      const { data: dateData, error: dateError } = await supabase
+        .from('playdate_data')
+        .select('value')
+        .eq('key', 'dates')
+        .single();
+
+      if (!dateError && dateData) {
+        setDateRange(JSON.parse(dateData.value));
       } else {
         // Default to next 7 days
         const today = new Date();
@@ -62,19 +83,10 @@ const App = () => {
           dates.push(date.toISOString().split('T')[0]);
         }
         setDateRange(dates);
-        await window.storage.set('playdate-dates', JSON.stringify(dates), true);
+        await supabase.from('playdate_data').upsert({ key: 'dates', value: JSON.stringify(dates) });
       }
     } catch (error) {
-      console.log('First time setup - no existing data');
-      // Set default date range for first time
-      const today = new Date();
-      const dates = [];
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        dates.push(date.toISOString().split('T')[0]);
-      }
-      setDateRange(dates);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -82,7 +94,11 @@ const App = () => {
 
   const saveChildren = async (updatedChildren) => {
     try {
-      await window.storage.set('playdate-children', JSON.stringify(updatedChildren), true);
+      const { error } = await supabase
+        .from('playdate_data')
+        .upsert({ key: 'children', value: JSON.stringify(updatedChildren) });
+      
+      if (error) throw error;
     } catch (error) {
       console.error('Error saving children:', error);
       alert('Failed to save data. Please try again.');
@@ -193,7 +209,7 @@ const App = () => {
     }
 
     setDateRange(dates);
-    await window.storage.set('playdate-dates', JSON.stringify(dates), true);
+    await supabase.from('playdate_data').upsert({ key: 'dates', value: JSON.stringify(dates) });
     setShowSettings(false);
     setTempStartDate('');
     setTempEndDate('');
@@ -225,7 +241,6 @@ const App = () => {
             </button>
           </div>
 
-          {/* Settings Modal */}
           {showSettings && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full">
