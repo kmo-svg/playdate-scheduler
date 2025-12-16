@@ -94,15 +94,51 @@ const App = () => {
 
   const saveChildren = async (updatedChildren) => {
     try {
-      const { error } = await supabase
+      // First check if record exists
+      const { data: existing } = await supabase
         .from('playdate_data')
-        .upsert({ key: 'children', value: JSON.stringify(updatedChildren) });
+        .select('id')
+        .eq('key', 'children')
+        .single();
+
+      let result;
+      if (existing) {
+        // Update existing record
+        result = await supabase
+          .from('playdate_data')
+          .update({ value: JSON.stringify(updatedChildren) })
+          .eq('key', 'children');
+      } else {
+        // Insert new record
+        result = await supabase
+          .from('playdate_data')
+          .insert({ key: 'children', value: JSON.stringify(updatedChildren) });
+      }
       
-      if (error) throw error;
+      if (result.error) {
+        console.error('Supabase error details:', result.error);
+        throw result.error;
+      }
+      console.log('Successfully saved children');
     } catch (error) {
       console.error('Error saving children:', error);
-      alert('Failed to save data. Please try again.');
+      alert(`Failed to save data: ${error.message || 'Please check console for details'}`);
     }
+  };
+
+  const deleteChild = async (childId) => {
+    if (!confirm('Are you sure you want to remove this child and all their availability?')) {
+      return;
+    }
+
+    const updatedChildren = children.filter(c => c.id !== childId);
+    setChildren(updatedChildren);
+    
+    if (currentChild?.id === childId) {
+      setCurrentChild(null);
+    }
+    
+    await saveChildren(updatedChildren);
   };
 
   const addChild = async () => {
@@ -209,7 +245,34 @@ const App = () => {
     }
 
     setDateRange(dates);
-    await supabase.from('playdate_data').upsert({ key: 'dates', value: JSON.stringify(dates) });
+    
+    // Use same pattern as saveChildren
+    try {
+      const { data: existing } = await supabase
+        .from('playdate_data')
+        .select('id')
+        .eq('key', 'dates')
+        .single();
+
+      let result;
+      if (existing) {
+        result = await supabase
+          .from('playdate_data')
+          .update({ value: JSON.stringify(dates) })
+          .eq('key', 'dates');
+      } else {
+        result = await supabase
+          .from('playdate_data')
+          .insert({ key: 'dates', value: JSON.stringify(dates) });
+      }
+      
+      if (result.error) throw result.error;
+    } catch (error) {
+      console.error('Error saving dates:', error);
+      alert('Failed to save date range');
+      return;
+    }
+    
     setShowSettings(false);
     setTempStartDate('');
     setTempEndDate('');
@@ -320,17 +383,25 @@ const App = () => {
 
             <div className="flex flex-wrap gap-2">
               {children.map(child => (
-                <button
-                  key={child.id}
-                  onClick={() => switchChild(child)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    currentChild?.id === child.id
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
-                  }`}
-                >
-                  {child.name}
-                </button>
+                <div key={child.id} className="relative group">
+                  <button
+                    onClick={() => switchChild(child)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentChild?.id === child.id
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
+                    }`}
+                  >
+                    {child.name}
+                  </button>
+                  <button
+                    onClick={() => deleteChild(child.id)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    title="Remove child"
+                  >
+                    ×
+                  </button>
+                </div>
               ))}
             </div>
 
