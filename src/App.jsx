@@ -472,6 +472,15 @@ const App = () => {
               <p className="mt-3 text-sm text-gray-600">
                 Currently editing: <span className="font-semibold">{currentChild.name}</span>
                 <span className="ml-2 text-gray-500">(Right-click or long-press to delete)</span>
+                {saveStatus && (
+                  <span className={`ml-3 px-2 py-1 rounded text-xs ${
+                    saveStatus === 'saving' 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'bg-green-100 text-green-700'
+                  }`}>
+                    {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -487,7 +496,7 @@ const App = () => {
           )}
 
           {currentChild ? (
-            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-200 rounded-lg">
+            <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-20 bg-white">
                   <tr>
