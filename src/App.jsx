@@ -557,7 +557,7 @@ const App = () => {
               <Users className="w-16 h-16 mx-auto mb-3 opacity-50" />
               <p>Add a child to get started!</p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
