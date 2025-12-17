@@ -394,18 +394,26 @@ const App = () => {
       return;
     }
 
-    // Format phone numbers for SMS URL (remove non-digits)
-    const phoneNumbers = otherKidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(';');
-    
     // Create message
     const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
     
-    // Create SMS URL with proper format for multiple recipients
-    // iOS format: sms:number1;number2&body=message
-    const smsUrl = `sms:${phoneNumbers}&body=${encodeURIComponent(message)}`;
+    // Format phone numbers for display
+    const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
+    const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     
-    // Open SMS
-    window.location.href = smsUrl;
+    // Try to copy to clipboard
+    const textToCopy = `Phone Numbers:\n${phoneNumbersOnly}\n\nMessage:\n${message}`;
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      if (confirm(`📋 Copied to clipboard!\n\nRecipients:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app, then paste the phone numbers.`)) {
+        // Open messages app without pre-populated numbers (more reliable)
+        window.location.href = 'sms:&body=' + encodeURIComponent(message);
+      }
+    }).catch(() => {
+      // Fallback if clipboard fails
+      alert(`Send to:\n${phoneList}\n\nMessage:\n${message}`);
+      window.location.href = 'sms:&body=' + encodeURIComponent(message);
+    });
   };
 
   const handleSlotTouchStart = (date, time) => {
