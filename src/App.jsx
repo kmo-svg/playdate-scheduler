@@ -1,18 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Users, Settings, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { supabase } from './supabaseClient';
+import { Calendar, Users, Settings, X, ChevronLeft, ChevronRight, Phone, MessageCircle } from 'lucide-react';
+
+// Mock Supabase client for demo - replace with actual import in your app
+const supabase = {
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        single: async () => ({ data: null, error: null })
+      })
+    }),
+    upsert: async () => ({ error: null }),
+    update: () => ({
+      eq: async () => ({ error: null })
+    }),
+    insert: async () => ({ error: null })
+  }),
+  channel: () => ({
+    on: () => ({
+      subscribe: () => {}
+    })
+  }),
+  removeChannel: () => {}
+};
 
 const App = () => {
   const [childName, setChildName] = useState('');
+  const [childPhone, setChildPhone] = useState('');
   const [children, setChildren] = useState([]);
   const [currentChild, setCurrentChild] = useState(null);
   const [showNameInput, setShowNameInput] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [showEditPhone, setShowEditPhone] = useState(null);
+  const [editingPhone, setEditingPhone] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [dateRange, setDateRange] = useState([]);
   const [tempStartDate, setTempStartDate] = useState('');
   const [tempEndDate, setTempEndDate] = useState('');
-  const [saveStatus, setSaveStatus] = useState(''); // 'saving', 'saved', or ''
+  const [saveStatus, setSaveStatus] = useState('');
   const scrollContainerRef = useRef(null);
 
   const generateTimeSlots = () => {
@@ -37,7 +61,6 @@ const App = () => {
   useEffect(() => {
     loadData();
     
-    // Subscribe to changes
     const channel = supabase
       .channel('playdate_changes')
       .on('postgres_changes', 
@@ -55,7 +78,6 @@ const App = () => {
     try {
       setLoading(true);
       
-      // Load children
       const { data: childrenData, error: childrenError } = await supabase
         .from('playdate_data')
         .select('value')
@@ -66,7 +88,6 @@ const App = () => {
         setChildren(JSON.parse(childrenData.value));
       }
 
-      // Load date range
       const { data: dateData, error: dateError } = await supabase
         .from('playdate_data')
         .select('value')
@@ -76,7 +97,6 @@ const App = () => {
       if (!dateError && dateData) {
         setDateRange(JSON.parse(dateData.value));
       } else {
-        // Default to next 7 days
         const today = new Date();
         const dates = [];
         for (let i = 0; i < 7; i++) {
@@ -98,7 +118,6 @@ const App = () => {
     try {
       setSaveStatus('saving');
       
-      // First check if record exists
       const { data: existing } = await supabase
         .from('playdate_data')
         .select('id')
@@ -107,13 +126,11 @@ const App = () => {
 
       let result;
       if (existing) {
-        // Update existing record
         result = await supabase
           .from('playdate_data')
           .update({ value: JSON.stringify(updatedChildren) })
           .eq('key', 'children');
       } else {
-        // Insert new record
         result = await supabase
           .from('playdate_data')
           .insert({ key: 'children', value: JSON.stringify(updatedChildren) });
@@ -123,9 +140,8 @@ const App = () => {
         console.error('Supabase error details:', result.error);
         throw result.error;
       }
-      console.log('Successfully saved children');
       setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(''), 2000); // Clear after 2 seconds
+      setTimeout(() => setSaveStatus(''), 2000);
     } catch (error) {
       console.error('Error saving children:', error);
       setSaveStatus('');
@@ -160,7 +176,7 @@ const App = () => {
   const handleChildTouchStart = (childId) => {
     const touchTimer = setTimeout(() => {
       deleteChild(childId);
-    }, 500); // 500ms long press
+    }, 500);
     
     return touchTimer;
   };
@@ -172,7 +188,6 @@ const App = () => {
   const toggleAllSlotsForDay = async (date) => {
     if (!currentChild) return;
     
-    // Check if all slots for this day are already selected
     const allSlotsSelected = timeSlots.every(slot => {
       const key = `${date}-${slot.time}`;
       return currentChild.availability[key];
@@ -185,10 +200,8 @@ const App = () => {
         timeSlots.forEach(slot => {
           const key = `${date}-${slot.time}`;
           if (allSlotsSelected) {
-            // If all selected, deselect all
             delete newAvailability[key];
           } else {
-            // Otherwise, select all
             newAvailability[key] = true;
           }
         });
@@ -214,7 +227,7 @@ const App = () => {
 
   const scrollSchedule = (direction) => {
     if (scrollContainerRef.current) {
-      const scrollAmount = 300; // pixels to scroll
+      const scrollAmount = 300;
       scrollContainerRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
@@ -227,15 +240,35 @@ const App = () => {
       const newChild = {
         id: Date.now(),
         name: childName.trim(),
+        phone: childPhone.trim(),
         availability: {}
       };
       const updatedChildren = [...children, newChild];
       setChildren(updatedChildren);
       setCurrentChild(newChild);
       setChildName('');
+      setChildPhone('');
       setShowNameInput(false);
       await saveChildren(updatedChildren);
     }
+  };
+
+  const updateChildPhone = async (childId, newPhone) => {
+    const updatedChildren = children.map(c => {
+      if (c.id === childId) {
+        const updated = { ...c, phone: newPhone.trim() };
+        if (currentChild?.id === childId) {
+          setCurrentChild(updated);
+        }
+        return updated;
+      }
+      return c;
+    });
+    
+    setChildren(updatedChildren);
+    setShowEditPhone(null);
+    setEditingPhone('');
+    await saveChildren(updatedChildren);
   };
 
   const toggleSlot = async (date, time) => {
@@ -288,6 +321,88 @@ const App = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  const formatDateFull = (dateStr) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+
+  const findConsecutiveTimeRange = (date, clickedTime) => {
+    const availableKids = getAvailableChildren(date, clickedTime);
+    if (availableKids.length < 2) return null;
+
+    // Find all slots where these same kids are available
+    const clickedIndex = timeSlots.findIndex(s => s.time === clickedTime);
+    let startIndex = clickedIndex;
+    let endIndex = clickedIndex;
+
+    // Check backwards
+    for (let i = clickedIndex - 1; i >= 0; i--) {
+      const kids = getAvailableChildren(date, timeSlots[i].time);
+      if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
+        startIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    // Check forwards
+    for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
+      const kids = getAvailableChildren(date, timeSlots[i].time);
+      if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
+        endIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      startTime: timeSlots[startIndex].display,
+      endTime: timeSlots[endIndex].display,
+      children: availableKids
+    };
+  };
+
+  const handleSlotContextMenu = (e, date, time) => {
+    e.preventDefault();
+    const availableKids = getAvailableChildren(date, time);
+    
+    if (availableKids.length < 2) {
+      alert('Need at least 2 children available to create a group text');
+      return;
+    }
+
+    const timeRange = findConsecutiveTimeRange(date, time);
+    if (!timeRange) return;
+
+    // Filter out children without phone numbers
+    const kidsWithPhones = timeRange.children.filter(c => c.phone);
+    
+    if (kidsWithPhones.length === 0) {
+      alert('No phone numbers available for these children. Add phone numbers first!');
+      return;
+    }
+
+    // Format phone numbers for SMS URL (remove non-digits)
+    const phoneNumbers = kidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(',');
+    
+    // Create message
+    const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
+    
+    // Create SMS URL
+    const smsUrl = `sms:${phoneNumbers}?&body=${encodeURIComponent(message)}`;
+    
+    // Open SMS
+    window.location.href = smsUrl;
+  };
+
+  const handleSlotTouchStart = (date, time) => {
+    const touchTimer = setTimeout(() => {
+      handleSlotContextMenu({ preventDefault: () => {} }, date, time);
+    }, 500);
+    
+    return touchTimer;
+  };
+
   const saveDateRange = async () => {
     if (!tempStartDate || !tempEndDate) {
       alert('Please select both start and end dates');
@@ -311,7 +426,6 @@ const App = () => {
 
     setDateRange(dates);
     
-    // Use same pattern as saveChildren
     try {
       const { data: existing } = await supabase
         .from('playdate_data')
@@ -415,27 +529,41 @@ const App = () => {
             </div>
             
             {showNameInput ? (
-              <div className="flex gap-2 mb-4">
+              <div className="space-y-2 mb-4">
                 <input
                   type="text"
                   value={childName}
                   onChange={(e) => setChildName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addChild()}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && addChild()}
                   placeholder="Enter child's name"
-                  className="flex-1 px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-                <button
-                  onClick={addChild}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                >
-                  Add
-                </button>
-                <button
-                  onClick={() => setShowNameInput(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
-                >
-                  Cancel
-                </button>
+                <input
+                  type="tel"
+                  value={childPhone}
+                  onChange={(e) => setChildPhone(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addChild()}
+                  placeholder="Phone number (optional)"
+                  className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={addChild}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowNameInput(false);
+                      setChildName('');
+                      setChildPhone('');
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
               <button
@@ -451,24 +579,67 @@ const App = () => {
                 let touchTimer = null;
                 
                 return (
-                  <button
-                    key={child.id}
-                    onClick={() => handleChildClick(child)}
-                    onContextMenu={(e) => handleChildContextMenu(e, child.id)}
-                    onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
-                    onTouchEnd={() => handleChildTouchEnd(touchTimer)}
-                    onTouchMove={() => handleChildTouchEnd(touchTimer)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      currentChild?.id === child.id
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
-                    }`}
-                  >
-                    {child.name}
-                  </button>
+                  <div key={child.id} className="relative group">
+                    <button
+                      onClick={() => handleChildClick(child)}
+                      onContextMenu={(e) => handleChildContextMenu(e, child.id)}
+                      onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
+                      onTouchEnd={() => handleChildTouchEnd(touchTimer)}
+                      onTouchMove={() => handleChildTouchEnd(touchTimer)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        currentChild?.id === child.id
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
+                      }`}
+                    >
+                      {child.name}
+                      {child.phone && <Phone className="inline w-3 h-3 ml-1" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowEditPhone(child.id);
+                        setEditingPhone(child.phone || '');
+                      }}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                      title="Edit phone number"
+                    >
+                      <Phone className="w-3 h-3" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
+
+            {showEditPhone && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl p-6 max-w-sm w-full">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-800">Edit Phone Number</h3>
+                    <button onClick={() => {
+                      setShowEditPhone(null);
+                      setEditingPhone('');
+                    }} className="p-1 hover:bg-gray-100 rounded">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <input
+                    type="tel"
+                    value={editingPhone}
+                    onChange={(e) => setEditingPhone(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && updateChildPhone(showEditPhone, editingPhone)}
+                    placeholder="Phone number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => updateChildPhone(showEditPhone, editingPhone)}
+                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
 
             {currentChild && (
               <p className="mt-3 text-sm text-gray-600">
@@ -483,14 +654,15 @@ const App = () => {
               <p className="text-sm text-blue-800">
                 Click on time slots below to mark when <strong>{currentChild.name}</strong> is available. 
                 <span className="text-yellow-600 font-semibold"> Yellow = 1 child</span>, 
-                <span className="text-green-600 font-semibold"> Green = 2+ children</span>. Hover over a slot to see names.
+                <span className="text-green-600 font-semibold"> Green = 2+ children</span>. 
+                <MessageCircle className="inline w-4 h-4 mx-1" />
+                <span className="font-semibold">Right-click or long-press green slots to create a group text!</span>
               </p>
             </div>
           )}
 
           {currentChild ? (
             <div className="relative">
-              {/* Save Status - Fixed height container to prevent jumping */}
               <div className="h-12 flex justify-center items-center mb-2">
                 {saveStatus && (
                   <span className={`text-sm px-4 py-2 rounded-full shadow-md transition-all ${
@@ -503,7 +675,6 @@ const App = () => {
                 )}
               </div>
 
-              {/* Scroll buttons for desktop */}
               <div className="flex items-center gap-2 mb-2">
                 <button
                   onClick={() => scrollSchedule('left')}
@@ -563,11 +734,16 @@ const App = () => {
                         const colorClass = getSlotColor(date, slot.time);
                         const availableKids = getAvailableChildren(date, slot.time);
                         const kidNames = availableKids.map(k => k.name).join(', ');
+                        let slotTouchTimer = null;
                         
                         return (
                           <td key={date} className="p-1 border-b border-gray-200">
                             <button
                               onClick={() => toggleSlot(date, slot.time)}
+                              onContextMenu={(e) => handleSlotContextMenu(e, date, slot.time)}
+                              onTouchStart={() => { slotTouchTimer = handleSlotTouchStart(date, slot.time); }}
+                              onTouchEnd={() => clearTimeout(slotTouchTimer)}
+                              onTouchMove={() => clearTimeout(slotTouchTimer)}
                               title={kidNames || 'No children available'}
                               className={`w-full min-h-12 rounded transition-all ${
                                 available
@@ -579,6 +755,9 @@ const App = () => {
                                 <span className="text-xs font-medium text-gray-800 text-center leading-tight">
                                   {kidNames}
                                 </span>
+                              )}
+                              {availableKids.length >= 2 && (
+                                <MessageCircle className="absolute top-1 right-1 w-3 h-3 text-purple-700" />
                               )}
                             </button>
                           </td>
