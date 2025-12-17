@@ -17,7 +17,8 @@ const App = () => {
   const [tempEndDate, setTempEndDate] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const scrollContainerRef = useRef(null);
-  const childTouchTimerRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const [touchMoved, setTouchMoved] = useState(false);
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -145,11 +146,6 @@ const App = () => {
   };
 
   const handleChildClick = (child) => {
-    // Clear any pending delete timer
-    if (childTouchTimerRef.current) {
-      clearTimeout(childTouchTimerRef.current);
-      childTouchTimerRef.current = null;
-    }
     switchChild(child);
   };
 
@@ -158,18 +154,30 @@ const App = () => {
     deleteChild(childId);
   };
 
-  const handleChildTouchStart = (e, childId) => {
-    e.preventDefault();
-    childTouchTimerRef.current = setTimeout(() => {
+  const handleChildTouchStart = (childId) => {
+    setTouchMoved(false);
+    longPressTimerRef.current = setTimeout(() => {
       deleteChild(childId);
-      childTouchTimerRef.current = null;
     }, 500);
   };
 
-  const handleChildTouchEnd = (e) => {
-    if (childTouchTimerRef.current) {
-      clearTimeout(childTouchTimerRef.current);
-      childTouchTimerRef.current = null;
+  const handleChildTouchMove = () => {
+    setTouchMoved(true);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleChildTouchEnd = (child) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    
+    // Only switch if it wasn't a long press and didn't move
+    if (!touchMoved) {
+      switchChild(child);
     }
   };
 
@@ -369,29 +377,6 @@ const App = () => {
     };
   };
 
-  const copyToClipboard = (text) => {
-    // Create a temporary input element
-    const tempInput = document.createElement('input');
-    tempInput.style.position = 'absolute';
-    tempInput.style.left = '-9999px';
-    tempInput.value = text;
-    document.body.appendChild(tempInput);
-    
-    // Select and copy
-    tempInput.select();
-    tempInput.setSelectionRange(0, 99999); // For mobile devices
-    
-    let success = false;
-    try {
-      success = document.execCommand('copy');
-    } catch (err) {
-      console.error('Copy failed:', err);
-    }
-    
-    document.body.removeChild(tempInput);
-    return success;
-  };
-
   const handleSlotContextMenu = (e, date, time) => {
     e.preventDefault();
     
@@ -422,9 +407,33 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // Copy to clipboard using the reliable method
-    const clipboardWorked = copyToClipboard(phoneNumbersOnly);
+    // COPY FIRST before showing confirm dialog
+    const el = document.createElement('input');
+    el.value = phoneNumbersOnly;
+    el.setAttribute('readonly', '');
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
     
+    const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false;
+    el.select();
+    el.setSelectionRange(0, 99999);
+    
+    let clipboardWorked = false;
+    try {
+      clipboardWorked = document.execCommand('copy');
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+    
+    document.body.removeChild(el);
+    
+    if (selected) {
+      document.getSelection().removeAllRanges();
+      document.getSelection().addRange(selected);
+    }
+    
+    // NOW show the confirm dialog
     const confirmMsg = clipboardWorked 
       ? `Phone numbers copied to clipboard!\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`
       : `Send to:\n${phoneList}\n\nClick OK to open Messages app with pre-filled message.`;
@@ -619,9 +628,9 @@ const App = () => {
                   <button
                     onClick={() => handleChildClick(child)}
                     onContextMenu={(e) => handleChildContextMenu(e, child.id)}
-                    onTouchStart={(e) => handleChildTouchStart(e, child.id)}
-                    onTouchEnd={(e) => handleChildTouchEnd(e)}
-                    onTouchMove={(e) => handleChildTouchEnd(e)}
+                    onTouchStart={() => handleChildTouchStart(child.id)}
+                    onTouchMove={() => handleChildTouchMove()}
+                    onTouchEnd={() => handleChildTouchEnd(child)}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       currentChild?.id === child.id
                         ? 'bg-purple-600 text-white'
