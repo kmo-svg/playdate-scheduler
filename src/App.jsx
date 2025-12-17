@@ -8,8 +8,9 @@ const App = () => {
   const [children, setChildren] = useState([]);
   const [currentChild, setCurrentChild] = useState(null);
   const [showNameInput, setShowNameInput] = useState(false);
-  const [showEditPhone, setShowEditPhone] = useState(null);
-  const [editingPhone, setEditingPhone] = useState('');
+  const [showEditChild, setShowEditChild] = useState(null);
+  const [editingChildName, setEditingChildName] = useState('');
+  const [editingChildPhone, setEditingChildPhone] = useState('');
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [dateRange, setDateRange] = useState([]);
@@ -150,15 +151,19 @@ const App = () => {
     switchChild(child);
   };
 
-  const handleChildContextMenu = (e, childId) => {
+  const handleChildContextMenu = (e, child) => {
     e.preventDefault();
-    deleteChild(childId);
+    setShowEditChild(child.id);
+    setEditingChildName(child.name);
+    setEditingChildPhone(child.phone || '');
   };
 
-  const handleChildTouchStart = (childId) => {
+  const handleChildTouchStart = (child) => {
     setTouchMoved(false);
     longPressTimerRef.current = setTimeout(() => {
-      deleteChild(childId);
+      setShowEditChild(child.id);
+      setEditingChildName(child.name);
+      setEditingChildPhone(child.phone || '');
     }, 500);
   };
 
@@ -232,7 +237,15 @@ const App = () => {
   };
 
   const addChild = async () => {
-    if (!childName.trim()) return;
+    if (!childName.trim()) {
+      alert('Please enter a child name');
+      return;
+    }
+    
+    if (!childPhone.trim()) {
+      alert('Phone number is required');
+      return;
+    }
     
     const newChild = {
       id: Date.now().toString(),
@@ -251,10 +264,20 @@ const App = () => {
     await saveChildren(updatedChildren);
   };
 
-  const updateChildPhone = async (childId, newPhone) => {
+  const updateChild = async (childId, newName, newPhone) => {
+    if (!newName.trim()) {
+      alert('Child name cannot be empty');
+      return;
+    }
+    
+    if (!newPhone.trim()) {
+      alert('Phone number is required');
+      return;
+    }
+    
     const updatedChildren = children.map(c => {
       if (c.id === childId) {
-        const updated = { ...c, phone: newPhone.trim() };
+        const updated = { ...c, name: newName.trim(), phone: newPhone.trim() };
         if (currentChild?.id === childId) {
           setCurrentChild(updated);
         }
@@ -264,8 +287,9 @@ const App = () => {
     });
     
     setChildren(updatedChildren);
-    setShowEditPhone(null);
-    setEditingPhone('');
+    setShowEditChild(null);
+    setEditingChildName('');
+    setEditingChildPhone('');
     await saveChildren(updatedChildren);
   };
 
@@ -586,7 +610,7 @@ const App = () => {
                   value={childPhone}
                   onChange={(e) => setChildPhone(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addChild()}
-                  placeholder="Phone (optional)"
+                  placeholder="Phone (required)"
                   className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
                 <button
@@ -617,63 +641,86 @@ const App = () => {
 
             <div className="flex gap-2 flex-wrap">
               {children.map(child => (
-                <div key={child.id} className="relative group">
-                  <button
-                    onClick={() => handleChildClick(child)}
-                    onContextMenu={(e) => handleChildContextMenu(e, child.id)}
-                    onTouchStart={() => handleChildTouchStart(child.id)}
-                    onTouchMove={() => handleChildTouchMove()}
-                    onTouchEnd={() => handleChildTouchEnd(child)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      currentChild?.id === child.id
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
-                    }`}
-                  >
-                    {child.name}
-                    {child.phone && <Phone className="inline w-3 h-3 ml-1" />}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowEditPhone(child.id);
-                      setEditingPhone(child.phone || '');
-                    }}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                    title="Edit phone number"
-                  >
-                    <Phone className="w-3 h-3" />
-                  </button>
-                </div>
+                <button
+                  key={child.id}
+                  onClick={() => handleChildClick(child)}
+                  onContextMenu={(e) => handleChildContextMenu(e, child)}
+                  onTouchStart={() => handleChildTouchStart(child)}
+                  onTouchMove={() => handleChildTouchMove()}
+                  onTouchEnd={() => handleChildTouchEnd(child)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    currentChild?.id === child.id
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
+                  }`}
+                >
+                  {child.name}
+                  {child.phone && <Phone className="inline w-3 h-3 ml-1" />}
+                </button>
               ))}
             </div>
 
-            {showEditPhone && (
+            {showEditChild && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-xl p-6 max-w-sm w-full">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-gray-800">Edit Phone Number</h3>
+                    <h3 className="text-lg font-bold text-gray-800">Edit Child</h3>
                     <button onClick={() => {
-                      setShowEditPhone(null);
-                      setEditingPhone('');
+                      setShowEditChild(null);
+                      setEditingChildName('');
+                      setEditingChildPhone('');
                     }} className="p-1 hover:bg-gray-100 rounded">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  <input
-                    type="tel"
-                    value={editingPhone}
-                    onChange={(e) => setEditingPhone(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && updateChildPhone(showEditPhone, editingPhone)}
-                    placeholder="Phone number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => updateChildPhone(showEditPhone, editingPhone)}
-                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                  >
-                    Save
-                  </button>
+                  
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Child's Name</label>
+                      <input
+                        type="text"
+                        value={editingChildName}
+                        onChange={(e) => setEditingChildName(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && updateChild(showEditChild, editingChildName, editingChildPhone)}
+                        placeholder="Child's name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        autoFocus
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={editingChildPhone}
+                        onChange={(e) => setEditingChildPhone(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && updateChild(showEditChild, editingChildName, editingChildPhone)}
+                        placeholder="Phone number (required)"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => updateChild(showEditChild, editingChildName, editingChildPhone)}
+                      className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                    >
+                      Save Changes
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowEditChild(null);
+                        setEditingChildName('');
+                        setEditingChildPhone('');
+                        deleteChild(showEditChild);
+                      }}
+                      className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                    >
+                      Delete Child
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -681,7 +728,7 @@ const App = () => {
             {currentChild && (
               <p className="mt-3 text-sm text-gray-600">
                 Currently editing: <span className="font-semibold">{currentChild.name}</span>
-                <span className="ml-2 text-gray-500">(Right-click or long-press to delete)</span>
+                <span className="ml-2 text-gray-500">(Right-click or long-press a child's name to edit)</span>
               </p>
             )}
           </div>
