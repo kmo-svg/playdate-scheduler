@@ -395,13 +395,14 @@ const App = () => {
     }
 
     // Format phone numbers for SMS URL (remove non-digits)
-    const phoneNumbers = otherKidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(',');
+    const phoneNumbers = otherKidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(';');
     
     // Create message
     const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
     
-    // Create SMS URL
-    const smsUrl = `sms:${phoneNumbers}?&body=${encodeURIComponent(message)}`;
+    // Create SMS URL with proper format for multiple recipients
+    // iOS format: sms:number1;number2&body=message
+    const smsUrl = `sms:${phoneNumbers}&body=${encodeURIComponent(message)}`;
     
     // Open SMS
     window.location.href = smsUrl;
