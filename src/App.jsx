@@ -360,10 +360,10 @@ const App = () => {
             </div>
             <button
               onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors opacity-30 hover:opacity-100"
               title="Settings"
             >
-              <Settings className="w-6 h-6 text-gray-600" />
+              <Settings className="w-6 h-6 text-gray-400" />
             </button>
           </div>
 
@@ -487,21 +487,7 @@ const App = () => {
           )}
 
           {currentChild ? (
-            <div className="relative">
-              {/* Save Status - Centered above table */}
-              {saveStatus && (
-                <div className="flex justify-center mb-2">
-                  <span className={`text-sm px-4 py-2 rounded-full shadow-md transition-all ${
-                    saveStatus === 'saving' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-green-500 text-white'
-                  }`}>
-                    {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
-                  </span>
-                </div>
-              )}
-              
-              <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
+            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-20 bg-white">
                   <tr>
