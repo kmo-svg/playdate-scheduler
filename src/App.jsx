@@ -143,12 +143,17 @@ const App = () => {
     await saveChildren(updatedChildren);
   };
 
-  const handleChildClick = (child) => {
+  const handleChildClick = (child, e) => {
+    // Prevent the touch handlers from interfering
+    if (e) {
+      e.stopPropagation();
+    }
     switchChild(child);
   };
 
   const handleChildContextMenu = (e, childId) => {
     e.preventDefault();
+    e.stopPropagation();
     deleteChild(childId);
   };
 
@@ -160,7 +165,7 @@ const App = () => {
     return touchTimer;
   };
 
-  const handleChildTouchEnd = (touchTimer) => {
+  const handleChildTouchEnd = (touchTimer, e) => {
     clearTimeout(touchTimer);
   };
 
@@ -398,36 +403,33 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // Try multiple clipboard methods for better reliability
+    // Use textarea method immediately (most reliable for mobile)
     let clipboardWorked = false;
-    
-    // Method 1: Modern Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        // Don't await - just fire it off
-        navigator.clipboard.writeText(phoneNumbersOnly)
-          .then(() => { clipboardWorked = true; })
-          .catch(() => { clipboardWorked = false; });
-      } catch (err) {
-        clipboardWorked = false;
-      }
-    }
-    
-    // Method 2: Fallback using textarea (works more reliably across contexts)
-    if (!clipboardWorked) {
-      try {
-        const textarea = document.createElement('textarea');
-        textarea.value = phoneNumbersOnly;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        clipboardWorked = true;
-      } catch (err) {
-        clipboardWorked = false;
-      }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = phoneNumbersOnly;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.width = '2em';
+      textarea.style.height = '2em';
+      textarea.style.padding = '0';
+      textarea.style.border = 'none';
+      textarea.style.outline = 'none';
+      textarea.style.boxShadow = 'none';
+      textarea.style.background = 'transparent';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      
+      // For iOS
+      textarea.setSelectionRange(0, 99999);
+      
+      clipboardWorked = document.execCommand('copy');
+      document.body.removeChild(textarea);
+    } catch (err) {
+      console.error('Clipboard error:', err);
+      clipboardWorked = false;
     }
     
     // Show confirm with phone numbers as backup
@@ -626,11 +628,11 @@ const App = () => {
                 return (
                   <div key={child.id} className="relative group">
                     <button
-                      onClick={() => handleChildClick(child)}
+                      onClick={(e) => handleChildClick(child, e)}
                       onContextMenu={(e) => handleChildContextMenu(e, child.id)}
                       onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
-                      onTouchEnd={() => handleChildTouchEnd(touchTimer)}
-                      onTouchMove={() => handleChildTouchEnd(touchTimer)}
+                      onTouchEnd={(e) => { handleChildTouchEnd(touchTimer, e); }}
+                      onTouchMove={(e) => { handleChildTouchEnd(touchTimer, e); }}
                       className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                         currentChild?.id === child.id
                           ? 'bg-purple-600 text-white'
