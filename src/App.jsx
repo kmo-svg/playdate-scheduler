@@ -355,9 +355,19 @@ const App = () => {
       }
     }
 
+    // Calculate end time by adding 30 minutes to the last slot
+    const endSlotTime = timeSlots[endIndex].time;
+    const [hours, minutes] = endSlotTime.split(':').map(Number);
+    const endDate = new Date(2000, 0, 1, hours, minutes + 30);
+    const endTimeDisplay = endDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+
     return {
       startTime: timeSlots[startIndex].display,
-      endTime: timeSlots[endIndex].display,
+      endTime: endTimeDisplay,
       children: availableKids
     };
   };
