@@ -397,16 +397,14 @@ const App = () => {
     // Create message
     const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
     
-    // Format phone numbers for display
+    // Format phone numbers for display and clipboard
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     
-    // Try to copy to clipboard
-    const textToCopy = `Phone Numbers:\n${phoneNumbersOnly}\n\nMessage:\n${message}`;
-    
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      if (confirm(`📋 Copied to clipboard!\n\nRecipients:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app, then paste the phone numbers.`)) {
-        // Open messages app without pre-populated numbers (more reliable)
+    // Copy only phone numbers to clipboard
+    navigator.clipboard.writeText(phoneNumbersOnly).then(() => {
+      if (confirm(`📋 Phone numbers copied to clipboard!\n\nRecipients:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app with pre-filled message, then paste the phone numbers.`)) {
+        // Open messages app with pre-populated message
         window.location.href = 'sms:&body=' + encodeURIComponent(message);
       }
     }).catch(() => {
