@@ -1,27 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Users, Settings, X, ChevronLeft, ChevronRight, Phone, MessageCircle } from 'lucide-react';
-
-// Mock Supabase client for demo - replace with actual import in your app
-const supabase = {
-  from: () => ({
-    select: () => ({
-      eq: () => ({
-        single: async () => ({ data: null, error: null })
-      })
-    }),
-    upsert: async () => ({ error: null }),
-    update: () => ({
-      eq: async () => ({ error: null })
-    }),
-    insert: async () => ({ error: null })
-  }),
-  channel: () => ({
-    on: () => ({
-      subscribe: () => {}
-    })
-  }),
-  removeChannel: () => {}
-};
+import { supabase } from './supabaseClient';
 
 const App = () => {
   const [childName, setChildName] = useState('');
@@ -31,7 +10,7 @@ const App = () => {
   const [showNameInput, setShowNameInput] = useState(false);
   const [showEditPhone, setShowEditPhone] = useState(null);
   const [editingPhone, setEditingPhone] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [dateRange, setDateRange] = useState([]);
   const [tempStartDate, setTempStartDate] = useState('');
@@ -330,12 +309,10 @@ const App = () => {
     const availableKids = getAvailableChildren(date, clickedTime);
     if (availableKids.length < 2) return null;
 
-    // Find all slots where these same kids are available
     const clickedIndex = timeSlots.findIndex(s => s.time === clickedTime);
     let startIndex = clickedIndex;
     let endIndex = clickedIndex;
 
-    // Check backwards
     for (let i = clickedIndex - 1; i >= 0; i--) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
@@ -345,7 +322,6 @@ const App = () => {
       }
     }
 
-    // Check forwards
     for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
@@ -355,7 +331,6 @@ const App = () => {
       }
     }
 
-    // Calculate end time by adding 30 minutes to the last slot
     const endSlotTime = timeSlots[endIndex].time;
     const [hours, minutes] = endSlotTime.split(':').map(Number);
     const endDate = new Date(2000, 0, 1, hours, minutes + 30);
@@ -384,7 +359,6 @@ const App = () => {
     const timeRange = findConsecutiveTimeRange(date, time);
     if (!timeRange) return;
 
-    // Filter out the current child (the parent using the tool) and children without phone numbers
     const otherKidsWithPhones = timeRange.children.filter(c => 
       c.id !== currentChild?.id && c.phone
     );
@@ -394,22 +368,17 @@ const App = () => {
       return;
     }
 
-    // Create message
     const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
     
-    // Format phone numbers for display and clipboard
-    const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     
-    // Copy only phone numbers to clipboard
     navigator.clipboard.writeText(phoneNumbersOnly).then(() => {
-      if (confirm(`📋 Phone numbers copied to clipboard!\n\nRecipients:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app with pre-filled message, then paste the phone numbers.`)) {
-        // Open messages app with pre-populated message
+      if (confirm('Click OK to open your Messages app with a pre-filled message, then paste the phone numbers (already copied to your clipboard).')) {
         window.location.href = 'sms:&body=' + encodeURIComponent(message);
       }
     }).catch(() => {
-      // Fallback if clipboard fails
-      alert(`Send to:\n${phoneList}\n\nMessage:\n${message}`);
+      const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
+      alert(`Clipboard not available. Send to:\n${phoneList}\n\nMessage:\n${message}`);
       window.location.href = 'sms:&body=' + encodeURIComponent(message);
     });
   };
