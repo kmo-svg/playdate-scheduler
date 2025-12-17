@@ -472,15 +472,6 @@ const App = () => {
               <p className="mt-3 text-sm text-gray-600">
                 Currently editing: <span className="font-semibold">{currentChild.name}</span>
                 <span className="ml-2 text-gray-500">(Right-click or long-press to delete)</span>
-                {saveStatus && (
-                  <span className={`ml-3 px-2 py-1 rounded text-xs ${
-                    saveStatus === 'saving' 
-                      ? 'bg-blue-100 text-blue-700' 
-                      : 'bg-green-100 text-green-700'
-                  }`}>
-                    {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
-                  </span>
-                )}
               </p>
             )}
           </div>
@@ -496,7 +487,21 @@ const App = () => {
           )}
 
           {currentChild ? (
-            <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
+            <div className="relative">
+              {/* Save Status - Centered above table */}
+              {saveStatus && (
+                <div className="flex justify-center mb-2">
+                  <span className={`text-sm px-4 py-2 rounded-full shadow-md transition-all ${
+                    saveStatus === 'saving' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-green-500 text-white'
+                  }`}>
+                    {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                  </span>
+                </div>
+              )}
+              
+              <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-20 bg-white">
                   <tr>
@@ -560,6 +565,7 @@ const App = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
           ) : (
             <div className="text-center py-12 text-gray-500">
