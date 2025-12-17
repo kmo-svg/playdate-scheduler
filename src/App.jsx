@@ -141,6 +141,27 @@ const App = () => {
     await saveChildren(updatedChildren);
   };
 
+  const handleChildClick = (child) => {
+    switchChild(child);
+  };
+
+  const handleChildContextMenu = (e, childId) => {
+    e.preventDefault();
+    deleteChild(childId);
+  };
+
+  const handleChildTouchStart = (childId) => {
+    const touchTimer = setTimeout(() => {
+      deleteChild(childId);
+    }, 500); // 500ms long press
+    
+    return touchTimer;
+  };
+
+  const handleChildTouchEnd = (touchTimer) => {
+    clearTimeout(touchTimer);
+  };
+
   const addChild = async () => {
     if (childName.trim()) {
       const newChild = {
@@ -364,10 +385,17 @@ const App = () => {
             )}
 
             <div className="flex flex-wrap gap-2">
-              {children.map(child => (
-                <div key={child.id} className="relative group">
+              {children.map(child => {
+                let touchTimer = null;
+                
+                return (
                   <button
-                    onClick={() => switchChild(child)}
+                    key={child.id}
+                    onClick={() => handleChildClick(child)}
+                    onContextMenu={(e) => handleChildContextMenu(e, child.id)}
+                    onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
+                    onTouchEnd={() => handleChildTouchEnd(touchTimer)}
+                    onTouchMove={() => handleChildTouchEnd(touchTimer)}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       currentChild?.id === child.id
                         ? 'bg-purple-600 text-white'
@@ -376,20 +404,14 @@ const App = () => {
                   >
                     {child.name}
                   </button>
-                  <button
-                    onClick={() => deleteChild(child.id)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                    title="Remove child"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {currentChild && (
               <p className="mt-3 text-sm text-gray-600">
                 Currently editing: <span className="font-semibold">{currentChild.name}</span>
+                <span className="ml-2 text-gray-500">(Right-click or long-press to delete)</span>
               </p>
             )}
           </div>
