@@ -205,24 +205,6 @@ const App = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  const getBestTimes = () => {
-    const slotCounts = [];
-    dateRange.forEach(date => {
-      timeSlots.forEach(slot => {
-        const availableKids = getAvailableChildren(date, slot.time);
-        if (availableKids.length > 0) {
-          slotCounts.push({ 
-            date,
-            time: slot.display, 
-            count: availableKids.length,
-            names: availableKids.map(k => k.name).join(', ')
-          });
-        }
-      });
-    });
-    return slotCounts.sort((a, b) => b.count - a.count).slice(0, 5);
-  };
-
   const saveDateRange = async () => {
     if (!tempStartDate || !tempEndDate) {
       alert('Please select both start and end dates');
@@ -411,19 +393,6 @@ const App = () => {
               </p>
             )}
           </div>
-
-          {children.length > 0 && getBestTimes().length > 0 && (
-            <div className="mb-6 p-4 bg-green-50 rounded-lg">
-              <h3 className="font-semibold text-gray-800 mb-2">Top Available Times</h3>
-              <div className="space-y-1">
-                {getBestTimes().map((slot, idx) => (
-                  <div key={idx} className="text-sm text-gray-700">
-                    <span className="font-medium">{formatDate(slot.date)} {slot.time}</span> - {slot.names}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {currentChild && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
