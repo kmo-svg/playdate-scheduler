@@ -374,16 +374,18 @@ const App = () => {
     const timeRange = findConsecutiveTimeRange(date, time);
     if (!timeRange) return;
 
-    // Filter out children without phone numbers
-    const kidsWithPhones = timeRange.children.filter(c => c.phone);
+    // Filter out the current child (the parent using the tool) and children without phone numbers
+    const otherKidsWithPhones = timeRange.children.filter(c => 
+      c.id !== currentChild?.id && c.phone
+    );
     
-    if (kidsWithPhones.length === 0) {
-      alert('No phone numbers available for these children. Add phone numbers first!');
+    if (otherKidsWithPhones.length === 0) {
+      alert('No phone numbers available for the other children. Add phone numbers first!');
       return;
     }
 
     // Format phone numbers for SMS URL (remove non-digits)
-    const phoneNumbers = kidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(',');
+    const phoneNumbers = otherKidsWithPhones.map(c => c.phone.replace(/\D/g, '')).join(',');
     
     // Create message
     const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
