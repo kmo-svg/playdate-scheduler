@@ -19,12 +19,17 @@ const App = () => {
     for (let hour = 9; hour <= 20; hour++) {
       for (let min = 0; min < 60; min += 30) {
         if (hour === 20 && min > 0) break;
-        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        const display = new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        });
+        const time = `${hour.toString().padStart(2, '0')}:${min
+          .toString()
+          .padStart(2, '0')}`;
+        const display = new Date(`2000-01-01T${time}`).toLocaleTimeString(
+          'en-US',
+          {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }
+        );
         slots.push({ time, display });
       }
     }
@@ -35,11 +40,12 @@ const App = () => {
 
   useEffect(() => {
     loadData();
-    
+
     // Subscribe to changes
     const channel = supabase
       .channel('playdate_changes')
-      .on('postgres_changes', 
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'playdate_data' },
         () => loadData()
       )
@@ -53,7 +59,7 @@ const App = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load children
       const { data: childrenData, error: childrenError } = await supabase
         .from('playdate_data')
@@ -84,7 +90,9 @@ const App = () => {
           dates.push(date.toISOString().split('T')[0]);
         }
         setDateRange(dates);
-        await supabase.from('playdate_data').upsert({ key: 'dates', value: JSON.stringify(dates) });
+        await supabase
+          .from('playdate_data')
+          .upsert({ key: 'dates', value: JSON.stringify(dates) });
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -96,7 +104,7 @@ const App = () => {
   const saveChildren = async (updatedChildren) => {
     try {
       setSaveStatus('saving');
-      
+
       // First check if record exists
       const { data: existing } = await supabase
         .from('playdate_data')
@@ -117,7 +125,7 @@ const App = () => {
           .from('playdate_data')
           .insert({ key: 'children', value: JSON.stringify(updatedChildren) });
       }
-      
+
       if (result.error) {
         console.error('Supabase error details:', result.error);
         throw result.error;
@@ -128,22 +136,30 @@ const App = () => {
     } catch (error) {
       console.error('Error saving children:', error);
       setSaveStatus('');
-      alert(`Failed to save data: ${error.message || 'Please check console for details'}`);
+      alert(
+        `Failed to save data: ${
+          error.message || 'Please check console for details'
+        }`
+      );
     }
   };
 
   const deleteChild = async (childId) => {
-    if (!confirm('Are you sure you want to remove this child and all their availability?')) {
+    if (
+      !confirm(
+        'Are you sure you want to remove this child and all their availability?'
+      )
+    ) {
       return;
     }
 
-    const updatedChildren = children.filter(c => c.id !== childId);
+    const updatedChildren = children.filter((c) => c.id !== childId);
     setChildren(updatedChildren);
-    
+
     if (currentChild?.id === childId) {
       setCurrentChild(null);
     }
-    
+
     await saveChildren(updatedChildren);
   };
 
@@ -160,7 +176,7 @@ const App = () => {
     const touchTimer = setTimeout(() => {
       deleteChild(childId);
     }, 500); // 500ms long press
-    
+
     return touchTimer;
   };
 
@@ -170,18 +186,18 @@ const App = () => {
 
   const toggleAllSlotsForDay = async (date) => {
     if (!currentChild) return;
-    
+
     // Check if all slots for this day are already selected
-    const allSlotsSelected = timeSlots.every(slot => {
+    const allSlotsSelected = timeSlots.every((slot) => {
       const key = `${date}-${slot.time}`;
       return currentChild.availability[key];
     });
-    
-    const updatedChildren = children.map(c => {
+
+    const updatedChildren = children.map((c) => {
       if (c.id === currentChild.id) {
         const newAvailability = { ...c.availability };
-        
-        timeSlots.forEach(slot => {
+
+        timeSlots.forEach((slot) => {
           const key = `${date}-${slot.time}`;
           if (allSlotsSelected) {
             // If all selected, deselect all
@@ -191,21 +207,21 @@ const App = () => {
             newAvailability[key] = true;
           }
         });
-        
+
         const updated = { ...c, availability: newAvailability };
         setCurrentChild(updated);
         return updated;
       }
       return c;
     });
-    
+
     setChildren(updatedChildren);
     await saveChildren(updatedChildren);
   };
 
   const isAllDaySelected = (date) => {
     if (!currentChild) return false;
-    return timeSlots.every(slot => {
+    return timeSlots.every((slot) => {
       const key = `${date}-${slot.time}`;
       return currentChild.availability[key];
     });
@@ -216,7 +232,7 @@ const App = () => {
       const newChild = {
         id: Date.now(),
         name: childName.trim(),
-        availability: {}
+        availability: {},
       };
       const updatedChildren = [...children, newChild];
       setChildren(updatedChildren);
@@ -229,8 +245,8 @@ const App = () => {
 
   const toggleSlot = async (date, time) => {
     if (!currentChild) return;
-    
-    const updatedChildren = children.map(c => {
+
+    const updatedChildren = children.map((c) => {
       if (c.id === currentChild.id) {
         const key = `${date}-${time}`;
         const newAvailability = { ...c.availability };
@@ -245,14 +261,14 @@ const App = () => {
       }
       return c;
     });
-    
+
     setChildren(updatedChildren);
     await saveChildren(updatedChildren);
   };
 
   const getAvailableChildren = (date, time) => {
     const key = `${date}-${time}`;
-    return children.filter(c => c.availability[key]);
+    return children.filter((c) => c.availability[key]);
   };
 
   const getSlotColor = (date, time) => {
@@ -274,7 +290,11 @@ const App = () => {
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
   const saveDateRange = async () => {
@@ -285,7 +305,7 @@ const App = () => {
 
     const start = new Date(tempStartDate);
     const end = new Date(tempEndDate);
-    
+
     if (start > end) {
       alert('Start date must be before end date');
       return;
@@ -299,7 +319,7 @@ const App = () => {
     }
 
     setDateRange(dates);
-    
+
     // Use same pattern as saveChildren
     try {
       const { data: existing } = await supabase
@@ -319,14 +339,14 @@ const App = () => {
           .from('playdate_data')
           .insert({ key: 'dates', value: JSON.stringify(dates) });
       }
-      
+
       if (result.error) throw result.error;
     } catch (error) {
       console.error('Error saving dates:', error);
       alert('Failed to save date range');
       return;
     }
-    
+
     setShowSettings(false);
     setTempStartDate('');
     setTempEndDate('');
@@ -347,13 +367,17 @@ const App = () => {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Calendar className="w-8 h-8 text-purple-600" />
-              <h1 className="text-3xl font-bold text-gray-800">Play Date Scheduler</h1>
+              <h1 className="text-3xl font-bold text-gray-800">
+                Play Date Scheduler
+              </h1>
               {saveStatus && (
-                <span className={`text-sm px-3 py-1 rounded-full transition-all ${
-                  saveStatus === 'saving' 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'bg-green-100 text-green-700'
-                }`}>
+                <span
+                  className={`text-sm px-3 py-1 rounded-full transition-all ${
+                    saveStatus === 'saving'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-green-100 text-green-700'
+                  }`}
+                >
                   {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
                 </span>
               )}
@@ -371,14 +395,21 @@ const App = () => {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Date Range Settings</h2>
-                  <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Date Range Settings
+                  </h2>
+                  <button
+                    onClick={() => setShowSettings(false)}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
                     <input
                       type="date"
                       value={tempStartDate}
@@ -387,7 +418,9 @@ const App = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date
+                    </label>
                     <input
                       type="date"
                       value={tempEndDate}
@@ -411,7 +444,7 @@ const App = () => {
               <Users className="w-5 h-5 text-purple-600" />
               <h2 className="text-lg font-semibold text-gray-800">Children</h2>
             </div>
-            
+
             {showNameInput ? (
               <div className="flex gap-2 mb-4">
                 <input
@@ -445,15 +478,17 @@ const App = () => {
             )}
 
             <div className="flex flex-wrap gap-2">
-              {children.map(child => {
+              {children.map((child) => {
                 let touchTimer = null;
-                
+
                 return (
                   <button
                     key={child.id}
                     onClick={() => handleChildClick(child)}
                     onContextMenu={(e) => handleChildContextMenu(e, child.id)}
-                    onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
+                    onTouchStart={() => {
+                      touchTimer = handleChildTouchStart(child.id);
+                    }}
                     onTouchEnd={() => handleChildTouchEnd(touchTimer)}
                     onTouchMove={() => handleChildTouchEnd(touchTimer)}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -470,8 +505,11 @@ const App = () => {
 
             {currentChild && (
               <p className="mt-3 text-sm text-gray-600">
-                Currently editing: <span className="font-semibold">{currentChild.name}</span>
-                <span className="ml-2 text-gray-500">(Right-click or long-press to delete)</span>
+                Currently editing:{' '}
+                <span className="font-semibold">{currentChild.name}</span>
+                <span className="ml-2 text-gray-500">
+                  (Right-click or long-press to delete)
+                </span>
               </p>
             )}
           </div>
@@ -479,23 +517,35 @@ const App = () => {
           {currentChild && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
-                Click on time slots below to mark when <strong>{currentChild.name}</strong> is available. 
-                <span className="text-yellow-600 font-semibold"> Yellow = 1 child</span>, 
-                <span className="text-green-600 font-semibold"> Green = 2+ children</span>. Hover over a slot to see names.
+                Click on time slots below to mark when{' '}
+                <strong>{currentChild.name}</strong> is available.
+                <span className="text-yellow-600 font-semibold">
+                  {' '}
+                  Yellow = 1 child
+                </span>
+                ,
+                <span className="text-green-600 font-semibold">
+                  {' '}
+                  Green = 2+ children
+                </span>
+                . Hover over a slot to see names.
               </p>
             </div>
           )}
 
           {currentChild ? (
-            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-200 rounded-lg">
+            <div className="relative max-h-[600px] overflow-auto border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
-                <thead className="sticky top-0 z-20 bg-white">
+                <thead>
                   <tr>
-                    <th className="sticky left-0 z-30 bg-white p-2 text-left font-semibold text-gray-700 border-b-2 border-purple-300 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
+                    <th className="sticky top-0 left-0 z-30 bg-white p-2 text-left font-semibold text-gray-700 border-b-2 border-purple-300 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                       Time
                     </th>
-                    {dateRange.map(date => (
-                      <th key={date} className="p-2 border-b-2 border-purple-300 min-w-[120px]">
+                    {dateRange.map((date) => (
+                      <th
+                        key={date}
+                        className="sticky top-0 z-20 bg-white p-2 border-b-2 border-purple-300 min-w-[120px]"
+                      >
                         <div className="flex flex-col gap-2">
                           <div className="text-center font-semibold text-gray-700">
                             {formatDate(date)}
@@ -516,17 +566,25 @@ const App = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {timeSlots.map(slot => (
+                  {timeSlots.map((slot) => (
                     <tr key={slot.time} className="hover:bg-gray-50">
                       <td className="sticky left-0 z-10 bg-white p-2 text-sm font-medium text-gray-600 border-b border-gray-200 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                         {slot.display}
                       </td>
-                      {dateRange.map(date => {
-                        const available = isCurrentChildAvailable(date, slot.time);
+                      {dateRange.map((date) => {
+                        const available = isCurrentChildAvailable(
+                          date,
+                          slot.time
+                        );
                         const colorClass = getSlotColor(date, slot.time);
-                        const availableKids = getAvailableChildren(date, slot.time);
-                        const kidNames = availableKids.map(k => k.name).join(', ');
-                        
+                        const availableKids = getAvailableChildren(
+                          date,
+                          slot.time
+                        );
+                        const kidNames = availableKids
+                          .map((k) => k.name)
+                          .join(', ');
+
                         return (
                           <td key={date} className="p-1 border-b border-gray-200">
                             <button
