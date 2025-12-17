@@ -162,6 +162,49 @@ const App = () => {
     clearTimeout(touchTimer);
   };
 
+  const toggleAllSlotsForDay = async (date) => {
+    if (!currentChild) return;
+    
+    // Check if all slots for this day are already selected
+    const allSlotsSelected = timeSlots.every(slot => {
+      const key = `${date}-${slot.time}`;
+      return currentChild.availability[key];
+    });
+    
+    const updatedChildren = children.map(c => {
+      if (c.id === currentChild.id) {
+        const newAvailability = { ...c.availability };
+        
+        timeSlots.forEach(slot => {
+          const key = `${date}-${slot.time}`;
+          if (allSlotsSelected) {
+            // If all selected, deselect all
+            delete newAvailability[key];
+          } else {
+            // Otherwise, select all
+            newAvailability[key] = true;
+          }
+        });
+        
+        const updated = { ...c, availability: newAvailability };
+        setCurrentChild(updated);
+        return updated;
+      }
+      return c;
+    });
+    
+    setChildren(updatedChildren);
+    await saveChildren(updatedChildren);
+  };
+
+  const isAllDaySelected = (date) => {
+    if (!currentChild) return false;
+    return timeSlots.every(slot => {
+      const key = `${date}-${slot.time}`;
+      return currentChild.availability[key];
+    });
+  };
+
   const addChild = async () => {
     if (childName.trim()) {
       const newChild = {
@@ -434,8 +477,22 @@ const App = () => {
                       Time
                     </th>
                     {dateRange.map(date => (
-                      <th key={date} className="p-2 text-center font-semibold text-gray-700 border-b-2 border-purple-300 min-w-[120px]">
-                        {formatDate(date)}
+                      <th key={date} className="p-2 border-b-2 border-purple-300 min-w-[120px]">
+                        <div className="flex flex-col gap-2">
+                          <div className="text-center font-semibold text-gray-700">
+                            {formatDate(date)}
+                          </div>
+                          <button
+                            onClick={() => toggleAllSlotsForDay(date)}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              isAllDaySelected(date)
+                                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            }`}
+                          >
+                            {isAllDaySelected(date) ? 'Clear All' : 'All Day'}
+                          </button>
+                        </div>
                       </th>
                     ))}
                   </tr>
