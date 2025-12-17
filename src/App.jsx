@@ -19,6 +19,7 @@ const App = () => {
   const scrollContainerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const [touchMoved, setTouchMoved] = useState(false);
+  const [pendingClipboardData, setPendingClipboardData] = useState(null);
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -175,7 +176,6 @@ const App = () => {
       longPressTimerRef.current = null;
     }
     
-    // Only switch if it wasn't a long press and didn't move
     if (!touchMoved) {
       switchChild(child);
     }
@@ -223,7 +223,7 @@ const App = () => {
 
   const scrollSchedule = (direction) => {
     if (scrollContainerRef.current) {
-      const scrollAmount = 300;
+      const scrollAmount = 200;
       scrollContainerRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
@@ -232,21 +232,23 @@ const App = () => {
   };
 
   const addChild = async () => {
-    if (childName.trim()) {
-      const newChild = {
-        id: Date.now(),
-        name: childName.trim(),
-        phone: childPhone.trim(),
-        availability: {}
-      };
-      const updatedChildren = [...children, newChild];
-      setChildren(updatedChildren);
-      setCurrentChild(newChild);
-      setChildName('');
-      setChildPhone('');
-      setShowNameInput(false);
-      await saveChildren(updatedChildren);
-    }
+    if (!childName.trim()) return;
+    
+    const newChild = {
+      id: Date.now().toString(),
+      name: childName.trim(),
+      phone: childPhone.trim(),
+      availability: {}
+    };
+    
+    const updatedChildren = [...children, newChild];
+    setChildren(updatedChildren);
+    setChildName('');
+    setChildPhone('');
+    setShowNameInput(false);
+    setCurrentChild(newChild);
+    
+    await saveChildren(updatedChildren);
   };
 
   const updateChildPhone = async (childId, newPhone) => {
@@ -377,57 +379,8 @@ const App = () => {
     };
   };
 
-  const copyToClipboardSync = (text) => {
-    // Synchronous clipboard copy that preserves user gesture context
-    // This is critical for mobile browsers
-    let success = false;
-    
-    try {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.style.position = 'fixed';
-      el.style.top = '0';
-      el.style.left = '0';
-      el.style.width = '2em';
-      el.style.height = '2em';
-      el.style.padding = '0';
-      el.style.border = 'none';
-      el.style.outline = 'none';
-      el.style.boxShadow = 'none';
-      el.style.background = 'transparent';
-      el.style.opacity = '0';
-      
-      document.body.appendChild(el);
-      
-      // iOS Safari specific
-      el.contentEditable = true;
-      el.readOnly = false;
-      
-      // Select text
-      if (navigator.userAgent.match(/ipad|iphone/i)) {
-        // iOS requires a range
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        el.setSelectionRange(0, 999999);
-      } else {
-        el.select();
-        el.setSelectionRange(0, 999999);
-      }
-      
-      success = document.execCommand('copy');
-      document.body.removeChild(el);
-      
-      return success;
-    } catch (err) {
-      console.error('Clipboard copy failed:', err);
-      return false;
-    }
-  };
-
-  const handleSlotContextMenu = async (e, date, time) => {
+  // NEW APPROACH: Use a custom modal that copies when user clicks a button
+  const handleSlotContextMenu = (e, date, time) => {
     e.preventDefault();
     
     if (!currentChild || !isCurrentChildAvailable(date, time)) {
@@ -457,89 +410,72 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // Desktop: Try async Clipboard API first, fallback to sync method
-    let clipboardWorked = false;
-    
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        await navigator.clipboard.writeText(phoneNumbersOnly);
-        clipboardWorked = true;
-      } catch (err) {
-        console.error('Clipboard API failed:', err);
-        clipboardWorked = copyToClipboardSync(phoneNumbersOnly);
-      }
-    } else {
-      clipboardWorked = copyToClipboardSync(phoneNumbersOnly);
-    }
-    
-    const confirmMsg = clipboardWorked 
-      ? `✓ Phone numbers copied!\n\n${phoneList}\n\nClick OK to open Messages app, then paste the numbers.`
-      : `Send to:\n${phoneList}\n\nClick OK to open Messages app.`;
-    
-    if (confirm(confirmMsg)) {
-      window.location.href = 'sms:?body=' + encodeURIComponent(message);
-    }
+    // Store data and show modal
+    setPendingClipboardData({
+      message,
+      phoneNumbersOnly,
+      phoneList,
+      otherKidsWithPhones
+    });
   };
 
-  const handleSlotTouchStart = (e, date, time) => {
-    // Copy to clipboard IMMEDIATELY on touchstart to preserve user gesture
-    // This is the only way to make clipboard work reliably on mobile
-    
-    if (!currentChild || !isCurrentChildAvailable(date, time)) {
-      return null;
-    }
-    
-    const availableKids = getAvailableChildren(date, time);
-    if (availableKids.length < 2) {
-      return null;
-    }
-
-    const timeRange = findConsecutiveTimeRange(date, time);
-    if (!timeRange) {
-      return null;
-    }
-
-    const otherKidsWithPhones = timeRange.children.filter(c => c.phone);
-    if (otherKidsWithPhones.length === 0) {
-      return null;
-    }
-
-    // Copy to clipboard NOW while we have user gesture context
-    const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
-    const clipboardSuccess = copyToClipboardSync(phoneNumbersOnly);
-    
-    // Store data for later use in the timeout
-    const contextData = {
-      date,
-      time,
-      timeRange,
-      otherKidsWithPhones,
-      phoneNumbersOnly,
-      clipboardSuccess
-    };
-    
-    // Now set up the delayed action (for long-press detection)
+  const handleSlotTouchStart = (date, time) => {
     const touchTimer = setTimeout(() => {
-      showSMSConfirmation(contextData);
+      handleSlotContextMenu({ preventDefault: () => {} }, date, time);
     }, 500);
     
     return touchTimer;
   };
 
-  const showSMSConfirmation = (contextData) => {
-    const { date, timeRange, otherKidsWithPhones, clipboardSuccess } = contextData;
+  const copyAndOpenSMS = async () => {
+    if (!pendingClipboardData) return;
+
+    const { message, phoneNumbersOnly } = pendingClipboardData;
     
-    const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
+    // Try to copy using multiple methods
+    let success = false;
     
-    const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
-    
-    const confirmMsg = clipboardSuccess 
-      ? `✓ Phone numbers copied!\n\n${phoneList}\n\nClick OK to open Messages app, then paste the numbers.`
-      : `Send to:\n${phoneList}\n\nClick OK to open Messages app.`;
-    
-    if (confirm(confirmMsg)) {
-      window.location.href = 'sms:?body=' + encodeURIComponent(message);
+    // Method 1: Modern Clipboard API
+    try {
+      await navigator.clipboard.writeText(phoneNumbersOnly);
+      success = true;
+      console.log('Clipboard API succeeded');
+    } catch (err) {
+      console.log('Clipboard API failed:', err);
     }
+    
+    // Method 2: execCommand fallback
+    if (!success) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = phoneNumbersOnly;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '0';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.padding = '0';
+        textarea.style.border = 'none';
+        textarea.style.outline = 'none';
+        textarea.style.boxShadow = 'none';
+        textarea.style.background = 'transparent';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+        success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        console.log('execCommand result:', success);
+      } catch (err) {
+        console.log('execCommand failed:', err);
+      }
+    }
+    
+    // Close modal
+    setPendingClipboardData(null);
+    
+    // Open SMS app
+    window.location.href = 'sms:?body=' + encodeURIComponent(message);
   };
 
   const saveDateRange = async () => {
@@ -564,33 +500,7 @@ const App = () => {
     }
 
     setDateRange(dates);
-    
-    try {
-      const { data: existing } = await supabase
-        .from('playdate_data')
-        .select('id')
-        .eq('key', 'dates')
-        .single();
-
-      let result;
-      if (existing) {
-        result = await supabase
-          .from('playdate_data')
-          .update({ value: JSON.stringify(dates) })
-          .eq('key', 'dates');
-      } else {
-        result = await supabase
-          .from('playdate_data')
-          .insert({ key: 'dates', value: JSON.stringify(dates) });
-      }
-      
-      if (result.error) throw result.error;
-    } catch (error) {
-      console.error('Error saving dates:', error);
-      alert('Failed to save date range');
-      return;
-    }
-    
+    await supabase.from('playdate_data').upsert({ key: 'dates', value: JSON.stringify(dates) });
     setShowSettings(false);
     setTempStartDate('');
     setTempEndDate('');
@@ -598,122 +508,114 @@ const App = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+        <div className="text-xl text-purple-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-100 to-pink-100 p-4">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Calendar className="w-8 h-8 text-purple-600" />
               <h1 className="text-3xl font-bold text-gray-800">Play Date Scheduler</h1>
             </div>
             <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors opacity-30 hover:opacity-100"
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 hover:bg-purple-100 rounded-lg transition-colors"
               title="Settings"
             >
-              <Settings className="w-6 h-6 text-gray-400" />
+              <Settings className="w-6 h-6 text-purple-600" />
             </button>
           </div>
 
           {showSettings && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl p-6 max-w-md w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Date Range Settings</h2>
-                  <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-100 rounded">
-                    <X className="w-5 h-5" />
-                  </button>
+            <div className="mb-6 p-4 bg-purple-50 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">Date Range Settings</h3>
+              <div className="flex gap-3 items-end flex-wrap">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={tempStartDate}
+                    onChange={(e) => setTempStartDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={tempStartDate}
-                      onChange={(e) => setTempStartDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={tempEndDate}
-                      onChange={(e) => setTempEndDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <button
-                    onClick={saveDateRange}
-                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                  >
-                    Save Date Range
-                  </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={tempEndDate}
+                    onChange={(e) => setTempEndDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
+                <button
+                  onClick={saveDateRange}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                >
+                  Update Range
+                </button>
               </div>
             </div>
           )}
 
-          <div className="mb-6 p-4 bg-purple-50 rounded-lg">
+          <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-5 h-5 text-purple-600" />
-              <h2 className="text-lg font-semibold text-gray-800">Children</h2>
+              <h2 className="text-xl font-semibold text-gray-800">Children</h2>
             </div>
             
             {showNameInput ? (
-              <div className="space-y-2 mb-4">
+              <div className="flex gap-2 mb-3 flex-wrap">
                 <input
                   type="text"
                   value={childName}
                   onChange={(e) => setChildName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && addChild()}
-                  placeholder="Enter child's name"
-                  className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  onKeyPress={(e) => e.key === 'Enter' && addChild()}
+                  placeholder="Child's name"
+                  className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  autoFocus
                 />
                 <input
                   type="tel"
                   value={childPhone}
                   onChange={(e) => setChildPhone(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addChild()}
-                  placeholder="Phone number (optional)"
-                  className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Phone (optional)"
+                  className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-                <div className="flex gap-2">
-                  <button
-                    onClick={addChild}
-                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                  >
-                    Add
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowNameInput(false);
-                      setChildName('');
-                      setChildPhone('');
-                    }}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <button
+                  onClick={addChild}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNameInput(false);
+                    setChildName('');
+                    setChildPhone('');
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <button
                 onClick={() => setShowNameInput(true)}
-                className="mb-4 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 font-medium"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium mb-3"
               >
                 + Add Child
               </button>
             )}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 flex-wrap">
               {children.map(child => (
                 <div key={child.id} className="relative group">
                   <button
@@ -876,7 +778,7 @@ const App = () => {
                             <button
                               onClick={() => toggleSlot(date, slot.time)}
                               onContextMenu={(e) => handleSlotContextMenu(e, date, slot.time)}
-                              onTouchStart={(e) => { slotTouchTimer = handleSlotTouchStart(e, date, slot.time); }}
+                              onTouchStart={() => { slotTouchTimer = handleSlotTouchStart(date, slot.time); }}
                               onTouchEnd={() => clearTimeout(slotTouchTimer)}
                               onTouchMove={() => clearTimeout(slotTouchTimer)}
                               title={kidNames || 'No children available'}
@@ -912,6 +814,51 @@ const App = () => {
           )}
         </div>
       </div>
+
+      {/* CUSTOM MODAL FOR CLIPBOARD */}
+      {pendingClipboardData && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Send Group Text</h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Recipients:</p>
+              <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                {pendingClipboardData.phoneList}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Instructions:</p>
+              <ol className="text-sm text-gray-600 list-decimal list-inside space-y-1">
+                <li>Click "Copy & Open Messages" below</li>
+                <li>Phone numbers will be copied to clipboard</li>
+                <li>Messages app will open with pre-filled text</li>
+                <li>Paste the phone numbers into the recipient field</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={copyAndOpenSMS}
+                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-base"
+              >
+                📋 Copy & Open Messages
+              </button>
+              <button
+                onClick={() => setPendingClipboardData(null)}
+                className="px-4 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-3 text-center">
+              Phone numbers: {pendingClipboardData.phoneNumbersOnly}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
