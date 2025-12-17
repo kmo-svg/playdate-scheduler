@@ -359,15 +359,6 @@ const App = () => {
             <div className="flex items-center gap-3">
               <Calendar className="w-8 h-8 text-purple-600" />
               <h1 className="text-3xl font-bold text-gray-800">Play Date Scheduler</h1>
-              {saveStatus && (
-                <span className={`text-sm px-3 py-1 rounded-full transition-all ${
-                  saveStatus === 'saving' 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'bg-green-100 text-green-700'
-                }`}>
-                  {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
-                </span>
-              )}
             </div>
             <button
               onClick={() => setShowSettings(true)}
