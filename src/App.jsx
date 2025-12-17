@@ -487,7 +487,21 @@ const App = () => {
           )}
 
           {currentChild ? (
-            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-200 rounded-lg">
+            <div className="relative">
+              {/* Save Status - Fixed height container to prevent jumping */}
+              <div className="h-12 flex justify-center items-center mb-2">
+                {saveStatus && (
+                  <span className={`text-sm px-4 py-2 rounded-full shadow-md transition-all ${
+                    saveStatus === 'saving' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-green-500 text-white'
+                  }`}>
+                    {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                  </span>
+                )}
+              </div>
+              
+              <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-20 bg-white">
                   <tr>
