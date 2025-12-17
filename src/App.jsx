@@ -319,28 +319,32 @@ const App = () => {
     let startIndex = clickedIndex;
     let endIndex = clickedIndex;
 
-    // Check backwards - all OTHER kids must still be available
+    // Check backwards - all OTHER kids AND current child must still be available
     for (let i = clickedIndex - 1; i >= 0; i--) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
       const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
       // Check if all the OTHER kids from clicked slot are still available
-      if (otherKidIds.every(id => theseKidIds.includes(id))) {
+      // AND current child is also available
+      const currentChildAvailable = kids.some(k => k.id === currentChild?.id);
+      if (otherKidIds.every(id => theseKidIds.includes(id)) && currentChildAvailable) {
         startIndex = i;
       } else {
         break;
       }
     }
 
-    // Check forwards - all OTHER kids must still be available
+    // Check forwards - all OTHER kids AND current child must still be available
     for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
       const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
       // Check if all the OTHER kids from clicked slot are still available
-      if (otherKidIds.every(id => theseKidIds.includes(id))) {
+      // AND current child is also available
+      const currentChildAvailable = kids.some(k => k.id === currentChild?.id);
+      if (otherKidIds.every(id => theseKidIds.includes(id)) && currentChildAvailable) {
         endIndex = i;
       } else {
         break;
