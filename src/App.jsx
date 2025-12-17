@@ -400,20 +400,44 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // Attempt to copy to clipboard immediately (within user gesture context)
-    let clipboardMessage = 'Phone numbers copied to clipboard!';
+    // Try multiple clipboard methods for better reliability
+    let clipboardWorked = false;
     
+    // Method 1: Modern Clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      // Start the clipboard write (it's async but we trigger it now)
-      navigator.clipboard.writeText(phoneNumbersOnly).catch(() => {
-        // If it fails, we'll handle in fallback
-      });
-    } else {
-      clipboardMessage = `Send to: ${phoneList}`;
+      try {
+        // Don't await - just fire it off
+        navigator.clipboard.writeText(phoneNumbersOnly)
+          .then(() => { clipboardWorked = true; })
+          .catch(() => { clipboardWorked = false; });
+      } catch (err) {
+        clipboardWorked = false;
+      }
     }
     
-    // Show confirm with phone numbers visible as backup
-    if (confirm(`${clipboardMessage}\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`)) {
+    // Method 2: Fallback using textarea (works more reliably across contexts)
+    if (!clipboardWorked) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = phoneNumbersOnly;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        clipboardWorked = true;
+      } catch (err) {
+        clipboardWorked = false;
+      }
+    }
+    
+    // Show confirm with phone numbers as backup
+    const confirmMsg = clipboardWorked 
+      ? `Phone numbers copied to clipboard!\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`
+      : `Send to:\n${phoneList}\n\nClick OK to open Messages app with pre-filled message.`;
+    
+    if (confirm(confirmMsg)) {
       window.location.href = 'sms:?body=' + encodeURIComponent(message);
     }
   };
