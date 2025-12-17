@@ -377,7 +377,7 @@ const App = () => {
     };
   };
 
-  const handleSlotContextMenu = (e, date, time) => {
+  const handleSlotContextMenu = async (e, date, time) => {
     e.preventDefault();
     
     if (!currentChild || !isCurrentChildAvailable(date, time)) {
@@ -407,33 +407,51 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // COPY FIRST before showing confirm dialog
-    const el = document.createElement('input');
-    el.value = phoneNumbersOnly;
-    el.setAttribute('readonly', '');
-    el.style.position = 'absolute';
-    el.style.left = '-9999px';
-    document.body.appendChild(el);
-    
-    const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false;
-    el.select();
-    el.setSelectionRange(0, 99999);
-    
+    // Try Clipboard API first with proper await
     let clipboardWorked = false;
-    try {
-      clipboardWorked = document.execCommand('copy');
-    } catch (err) {
-      console.error('Copy failed:', err);
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(phoneNumbersOnly);
+        clipboardWorked = true;
+      } catch (err) {
+        console.error('Clipboard API failed:', err);
+        clipboardWorked = false;
+      }
     }
     
-    document.body.removeChild(el);
-    
-    if (selected) {
-      document.getSelection().removeAllRanges();
-      document.getSelection().addRange(selected);
+    // Fallback to execCommand if Clipboard API failed
+    if (!clipboardWorked) {
+      try {
+        const el = document.createElement('textarea');
+        el.value = phoneNumbersOnly;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        
+        // Store current selection
+        const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false;
+        
+        el.select();
+        el.setSelectionRange(0, 99999);
+        
+        clipboardWorked = document.execCommand('copy');
+        
+        document.body.removeChild(el);
+        
+        // Restore previous selection
+        if (selected) {
+          document.getSelection().removeAllRanges();
+          document.getSelection().addRange(selected);
+        }
+      } catch (err) {
+        console.error('execCommand failed:', err);
+        clipboardWorked = false;
+      }
     }
     
-    // NOW show the confirm dialog
+    // Show confirm dialog
     const confirmMsg = clipboardWorked 
       ? `Phone numbers copied to clipboard!\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`
       : `Send to:\n${phoneList}\n\nClick OK to open Messages app with pre-filled message.`;
