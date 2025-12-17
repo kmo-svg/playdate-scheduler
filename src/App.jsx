@@ -549,10 +549,10 @@ const App = () => {
             </div>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="p-2 hover:bg-purple-100 rounded-lg transition-colors"
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors opacity-30 hover:opacity-60"
               title="Settings"
             >
-              <Settings className="w-6 h-6 text-purple-600" />
+              <Settings className="w-4 h-4 text-gray-400" />
             </button>
           </div>
 
