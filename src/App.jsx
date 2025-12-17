@@ -309,22 +309,44 @@ const App = () => {
     const availableKids = getAvailableChildren(date, clickedTime);
     if (availableKids.length < 2) return null;
 
+    // Get IDs of kids available at clicked time (excluding current child)
+    const relevantKidIds = availableKids
+      .filter(k => k.id !== currentChild?.id)
+      .map(k => k.id)
+      .sort();
+
     const clickedIndex = timeSlots.findIndex(s => s.time === clickedTime);
     let startIndex = clickedIndex;
     let endIndex = clickedIndex;
 
+    // Check backwards - must have exact same kids available
     for (let i = clickedIndex - 1; i >= 0; i--) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
-      if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
+      const theseKidIds = kids
+        .filter(k => k.id !== currentChild?.id)
+        .map(k => k.id)
+        .sort();
+      
+      // Check if arrays are exactly equal
+      if (theseKidIds.length === relevantKidIds.length && 
+          theseKidIds.every((id, idx) => id === relevantKidIds[idx])) {
         startIndex = i;
       } else {
         break;
       }
     }
 
+    // Check forwards - must have exact same kids available
     for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
-      if (kids.length >= 2 && kids.every(k => availableKids.some(ak => ak.id === k.id))) {
+      const theseKidIds = kids
+        .filter(k => k.id !== currentChild?.id)
+        .map(k => k.id)
+        .sort();
+      
+      // Check if arrays are exactly equal
+      if (theseKidIds.length === relevantKidIds.length && 
+          theseKidIds.every((id, idx) => id === relevantKidIds[idx])) {
         endIndex = i;
       } else {
         break;
@@ -343,7 +365,7 @@ const App = () => {
     return {
       startTime: timeSlots[startIndex].display,
       endTime: endTimeDisplay,
-      children: availableKids
+      children: availableKids.filter(k => k.id !== currentChild?.id)
     };
   };
 
@@ -359,9 +381,7 @@ const App = () => {
     const timeRange = findConsecutiveTimeRange(date, time);
     if (!timeRange) return;
 
-    const otherKidsWithPhones = timeRange.children.filter(c => 
-      c.id !== currentChild?.id && c.phone
-    );
+    const otherKidsWithPhones = timeRange.children.filter(c => c.phone);
     
     if (otherKidsWithPhones.length === 0) {
       alert('No phone numbers available for the other children. Add phone numbers first!');
@@ -374,12 +394,15 @@ const App = () => {
     
     navigator.clipboard.writeText(phoneNumbersOnly).then(() => {
       if (confirm('Click OK to open your Messages app with a pre-filled message, then paste the phone numbers (already copied to your clipboard).')) {
-        window.location.href = 'sms:&body=' + encodeURIComponent(message);
+        // Use setTimeout to ensure clipboard isn't overwritten by the SMS URL
+        setTimeout(() => {
+          window.location.href = 'sms:?body=' + encodeURIComponent(message);
+        }, 100);
       }
     }).catch(() => {
       const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
       alert(`Clipboard not available. Send to:\n${phoneList}\n\nMessage:\n${message}`);
-      window.location.href = 'sms:&body=' + encodeURIComponent(message);
+      window.location.href = 'sms:?body=' + encodeURIComponent(message);
     });
   };
 
