@@ -251,7 +251,9 @@ const App = () => {
 
   const getSlotColor = (date, time) => {
     const availableKids = getAvailableChildren(date, time);
-    return availableKids.length > 0 ? 'bg-green-400' : 'bg-gray-100';
+    if (availableKids.length === 0) return 'bg-gray-100';
+    if (availableKids.length === 1) return 'bg-yellow-400';
+    return 'bg-green-400';
   };
 
   const isCurrentChildAvailable = (date, time) => {
@@ -463,17 +465,18 @@ const App = () => {
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
                 Click on time slots below to mark when <strong>{currentChild.name}</strong> is available. 
-                Green slots show when at least one child is available. Hover over a slot to see names.
+                <span className="text-yellow-600 font-semibold"> Yellow = 1 child</span>, 
+                <span className="text-green-600 font-semibold"> Green = 2+ children</span>. Hover over a slot to see names.
               </p>
             </div>
           )}
 
           {currentChild ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
-                <thead>
+                <thead className="sticky top-0 z-20 bg-white">
                   <tr>
-                    <th className="sticky left-0 bg-white p-2 text-left font-semibold text-gray-700 border-b-2 border-purple-300">
+                    <th className="sticky left-0 z-30 bg-white p-2 text-left font-semibold text-gray-700 border-b-2 border-purple-300 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                       Time
                     </th>
                     {dateRange.map(date => (
@@ -500,7 +503,7 @@ const App = () => {
                 <tbody>
                   {timeSlots.map(slot => (
                     <tr key={slot.time} className="hover:bg-gray-50">
-                      <td className="sticky left-0 bg-white p-2 text-sm font-medium text-gray-600 border-b border-gray-200">
+                      <td className="sticky left-0 z-10 bg-white p-2 text-sm font-medium text-gray-600 border-b border-gray-200 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                         {slot.display}
                       </td>
                       {dateRange.map(date => {
