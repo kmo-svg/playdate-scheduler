@@ -17,6 +17,7 @@ const App = () => {
   const [tempEndDate, setTempEndDate] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const scrollContainerRef = useRef(null);
+  const childTouchTimerRef = useRef(null);
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -143,30 +144,33 @@ const App = () => {
     await saveChildren(updatedChildren);
   };
 
-  const handleChildClick = (child, e) => {
-    // Prevent the touch handlers from interfering
-    if (e) {
-      e.stopPropagation();
+  const handleChildClick = (child) => {
+    // Clear any pending delete timer
+    if (childTouchTimerRef.current) {
+      clearTimeout(childTouchTimerRef.current);
+      childTouchTimerRef.current = null;
     }
     switchChild(child);
   };
 
   const handleChildContextMenu = (e, childId) => {
     e.preventDefault();
-    e.stopPropagation();
     deleteChild(childId);
   };
 
-  const handleChildTouchStart = (childId) => {
-    const touchTimer = setTimeout(() => {
+  const handleChildTouchStart = (e, childId) => {
+    e.preventDefault();
+    childTouchTimerRef.current = setTimeout(() => {
       deleteChild(childId);
+      childTouchTimerRef.current = null;
     }, 500);
-    
-    return touchTimer;
   };
 
-  const handleChildTouchEnd = (touchTimer, e) => {
-    clearTimeout(touchTimer);
+  const handleChildTouchEnd = (e) => {
+    if (childTouchTimerRef.current) {
+      clearTimeout(childTouchTimerRef.current);
+      childTouchTimerRef.current = null;
+    }
   };
 
   const toggleAllSlotsForDay = async (date) => {
@@ -314,7 +318,6 @@ const App = () => {
     const availableKids = getAvailableChildren(date, clickedTime);
     if (availableKids.length < 2) return null;
 
-    // Get the OTHER kids available at clicked time (excluding current child)
     const otherKids = availableKids.filter(k => k.id !== currentChild?.id);
     const otherKidIds = otherKids.map(k => k.id).sort();
 
@@ -324,14 +327,11 @@ const App = () => {
     let startIndex = clickedIndex;
     let endIndex = clickedIndex;
 
-    // Check backwards - all OTHER kids AND current child must still be available
     for (let i = clickedIndex - 1; i >= 0; i--) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
       const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
-      // Check if all the OTHER kids from clicked slot are still available
-      // AND current child is also available
       const currentChildAvailable = kids.some(k => k.id === currentChild?.id);
       if (otherKidIds.every(id => theseKidIds.includes(id)) && currentChildAvailable) {
         startIndex = i;
@@ -340,14 +340,11 @@ const App = () => {
       }
     }
 
-    // Check forwards - all OTHER kids AND current child must still be available
     for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
       const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
       const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
-      // Check if all the OTHER kids from clicked slot are still available
-      // AND current child is also available
       const currentChildAvailable = kids.some(k => k.id === currentChild?.id);
       if (otherKidIds.every(id => theseKidIds.includes(id)) && currentChildAvailable) {
         endIndex = i;
@@ -372,10 +369,32 @@ const App = () => {
     };
   };
 
+  const copyToClipboard = (text) => {
+    // Create a temporary input element
+    const tempInput = document.createElement('input');
+    tempInput.style.position = 'absolute';
+    tempInput.style.left = '-9999px';
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    
+    // Select and copy
+    tempInput.select();
+    tempInput.setSelectionRange(0, 99999); // For mobile devices
+    
+    let success = false;
+    try {
+      success = document.execCommand('copy');
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+    
+    document.body.removeChild(tempInput);
+    return success;
+  };
+
   const handleSlotContextMenu = (e, date, time) => {
     e.preventDefault();
     
-    // Check if current child is available at this slot
     if (!currentChild || !isCurrentChildAvailable(date, time)) {
       alert('You can only create a group text for time slots when your child is available.');
       return;
@@ -403,36 +422,9 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // Use textarea method immediately (most reliable for mobile)
-    let clipboardWorked = false;
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = phoneNumbersOnly;
-      textarea.style.position = 'fixed';
-      textarea.style.top = '0';
-      textarea.style.left = '0';
-      textarea.style.width = '2em';
-      textarea.style.height = '2em';
-      textarea.style.padding = '0';
-      textarea.style.border = 'none';
-      textarea.style.outline = 'none';
-      textarea.style.boxShadow = 'none';
-      textarea.style.background = 'transparent';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      
-      // For iOS
-      textarea.setSelectionRange(0, 99999);
-      
-      clipboardWorked = document.execCommand('copy');
-      document.body.removeChild(textarea);
-    } catch (err) {
-      console.error('Clipboard error:', err);
-      clipboardWorked = false;
-    }
+    // Copy to clipboard using the reliable method
+    const clipboardWorked = copyToClipboard(phoneNumbersOnly);
     
-    // Show confirm with phone numbers as backup
     const confirmMsg = clipboardWorked 
       ? `Phone numbers copied to clipboard!\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`
       : `Send to:\n${phoneList}\n\nClick OK to open Messages app with pre-filled message.`;
@@ -622,39 +614,35 @@ const App = () => {
             )}
 
             <div className="flex flex-wrap gap-2">
-              {children.map(child => {
-                let touchTimer = null;
-                
-                return (
-                  <div key={child.id} className="relative group">
-                    <button
-                      onClick={(e) => handleChildClick(child, e)}
-                      onContextMenu={(e) => handleChildContextMenu(e, child.id)}
-                      onTouchStart={() => { touchTimer = handleChildTouchStart(child.id); }}
-                      onTouchEnd={(e) => { handleChildTouchEnd(touchTimer, e); }}
-                      onTouchMove={(e) => { handleChildTouchEnd(touchTimer, e); }}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        currentChild?.id === child.id
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
-                      }`}
-                    >
-                      {child.name}
-                      {child.phone && <Phone className="inline w-3 h-3 ml-1" />}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowEditPhone(child.id);
-                        setEditingPhone(child.phone || '');
-                      }}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                      title="Edit phone number"
-                    >
-                      <Phone className="w-3 h-3" />
-                    </button>
-                  </div>
-                );
-              })}
+              {children.map(child => (
+                <div key={child.id} className="relative group">
+                  <button
+                    onClick={() => handleChildClick(child)}
+                    onContextMenu={(e) => handleChildContextMenu(e, child.id)}
+                    onTouchStart={(e) => handleChildTouchStart(e, child.id)}
+                    onTouchEnd={(e) => handleChildTouchEnd(e)}
+                    onTouchMove={(e) => handleChildTouchEnd(e)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentChild?.id === child.id
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-purple-600 border border-purple-300 hover:bg-purple-50'
+                    }`}
+                  >
+                    {child.name}
+                    {child.phone && <Phone className="inline w-3 h-3 ml-1" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEditPhone(child.id);
+                      setEditingPhone(child.phone || '');
+                    }}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-purple-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                    title="Edit phone number"
+                  >
+                    <Phone className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
             </div>
 
             {showEditPhone && (
