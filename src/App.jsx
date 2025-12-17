@@ -370,49 +370,69 @@ const App = () => {
   };
 
   const handleSlotContextMenu = (e, date, time) => {
-    e.preventDefault();
-    const availableKids = getAvailableChildren(date, time);
-    
-    if (availableKids.length < 2) {
-      alert('Need at least 2 children available to create a group text');
-      return;
-    }
+  e.preventDefault();
+  
+  // Check if current child is available at this slot
+  if (!currentChild || !isCurrentChildAvailable(date, time)) {
+    alert('You can only create a group text for time slots when your child is available.');
+    return;
+  }
+  
+  const availableKids = getAvailableChildren(date, time);
+  
+  if (availableKids.length < 2) {
+    alert('Need at least 2 children available to create a group text');
+    return;
+  }
 
-    const timeRange = findConsecutiveTimeRange(date, time);
-    if (!timeRange) return;
+  const timeRange = findConsecutiveTimeRange(date, time);
+  if (!timeRange) return;
 
-    const otherKidsWithPhones = timeRange.children.filter(c => c.phone);
-    
-    if (otherKidsWithPhones.length === 0) {
-      alert('No phone numbers available for the other children. Add phone numbers first!');
-      return;
-    }
+  const otherKidsWithPhones = timeRange.children.filter(c => c.phone);
+  
+  if (otherKidsWithPhones.length === 0) {
+    alert('No phone numbers available for the other children. Add phone numbers first!');
+    return;
+  }
 
-    const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
-    
-    const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
-    
-    navigator.clipboard.writeText(phoneNumbersOnly).then(() => {
-      if (confirm('Click OK to open your Messages app with a pre-filled message, then paste the phone numbers (already copied to your clipboard).')) {
-        // Use setTimeout to ensure clipboard isn't overwritten by the SMS URL
-        setTimeout(() => {
+  const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
+  
+  const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
+  
+  // Try to write to clipboard
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(phoneNumbersOnly)
+      .then(() => {
+        if (confirm('Click OK to open your Messages app with a pre-filled message, then paste the phone numbers (already copied to your clipboard).')) {
+          setTimeout(() => {
+            window.location.href = 'sms:?body=' + encodeURIComponent(message);
+          }, 100);
+        }
+      })
+      .catch((err) => {
+        console.error('Clipboard error:', err);
+        // Fallback: show phone numbers in alert
+        const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
+        if (confirm(`Clipboard not available. Send to:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app.`)) {
           window.location.href = 'sms:?body=' + encodeURIComponent(message);
-        }, 100);
-      }
-    }).catch(() => {
-      const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
-      alert(`Clipboard not available. Send to:\n${phoneList}\n\nMessage:\n${message}`);
+        }
+      });
+  } else {
+    // Clipboard API not available - show fallback
+    const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
+    if (confirm(`Clipboard not available. Send to:\n${phoneList}\n\nMessage:\n${message}\n\nClick OK to open Messages app.`)) {
       window.location.href = 'sms:?body=' + encodeURIComponent(message);
-    });
-  };
+    }
+  }
+};
 
-  const handleSlotTouchStart = (date, time) => {
-    const touchTimer = setTimeout(() => {
-      handleSlotContextMenu({ preventDefault: () => {} }, date, time);
-    }, 500);
-    
-    return touchTimer;
-  };
+const handleSlotTouchStart = (date, time) => {
+  const touchTimer = setTimeout(() => {
+    handleSlotContextMenu({ preventDefault: () => {} }, date, time);
+  }, 500);
+  
+  return touchTimer;
+};
 
   const saveDateRange = async () => {
     if (!tempStartDate || !tempEndDate) {
