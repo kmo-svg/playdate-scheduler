@@ -309,44 +309,38 @@ const App = () => {
     const availableKids = getAvailableChildren(date, clickedTime);
     if (availableKids.length < 2) return null;
 
-    // Get IDs of kids available at clicked time (excluding current child)
-    const relevantKidIds = availableKids
-      .filter(k => k.id !== currentChild?.id)
-      .map(k => k.id)
-      .sort();
+    // Get the OTHER kids available at clicked time (excluding current child)
+    const otherKids = availableKids.filter(k => k.id !== currentChild?.id);
+    const otherKidIds = otherKids.map(k => k.id).sort();
+
+    if (otherKidIds.length === 0) return null;
 
     const clickedIndex = timeSlots.findIndex(s => s.time === clickedTime);
     let startIndex = clickedIndex;
     let endIndex = clickedIndex;
 
-    // Check backwards - must have exact same kids available
+    // Check backwards - all OTHER kids must still be available
     for (let i = clickedIndex - 1; i >= 0; i--) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
-      const theseKidIds = kids
-        .filter(k => k.id !== currentChild?.id)
-        .map(k => k.id)
-        .sort();
+      const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
+      const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
-      // Check if arrays are exactly equal
-      if (theseKidIds.length === relevantKidIds.length && 
-          theseKidIds.every((id, idx) => id === relevantKidIds[idx])) {
+      // Check if all the OTHER kids from clicked slot are still available
+      if (otherKidIds.every(id => theseKidIds.includes(id))) {
         startIndex = i;
       } else {
         break;
       }
     }
 
-    // Check forwards - must have exact same kids available
+    // Check forwards - all OTHER kids must still be available
     for (let i = clickedIndex + 1; i < timeSlots.length; i++) {
       const kids = getAvailableChildren(date, timeSlots[i].time);
-      const theseKidIds = kids
-        .filter(k => k.id !== currentChild?.id)
-        .map(k => k.id)
-        .sort();
+      const theseOtherKids = kids.filter(k => k.id !== currentChild?.id);
+      const theseKidIds = theseOtherKids.map(k => k.id).sort();
       
-      // Check if arrays are exactly equal
-      if (theseKidIds.length === relevantKidIds.length && 
-          theseKidIds.every((id, idx) => id === relevantKidIds[idx])) {
+      // Check if all the OTHER kids from clicked slot are still available
+      if (otherKidIds.every(id => theseKidIds.includes(id))) {
         endIndex = i;
       } else {
         break;
@@ -365,7 +359,7 @@ const App = () => {
     return {
       startTime: timeSlots[startIndex].display,
       endTime: endTimeDisplay,
-      children: availableKids.filter(k => k.id !== currentChild?.id)
+      children: otherKids
     };
   };
 
