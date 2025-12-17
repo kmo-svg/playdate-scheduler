@@ -377,6 +377,56 @@ const App = () => {
     };
   };
 
+  const copyToClipboardSync = (text) => {
+    // Synchronous clipboard copy that preserves user gesture context
+    // This is critical for mobile browsers
+    let success = false;
+    
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.top = '0';
+      el.style.left = '0';
+      el.style.width = '2em';
+      el.style.height = '2em';
+      el.style.padding = '0';
+      el.style.border = 'none';
+      el.style.outline = 'none';
+      el.style.boxShadow = 'none';
+      el.style.background = 'transparent';
+      el.style.opacity = '0';
+      
+      document.body.appendChild(el);
+      
+      // iOS Safari specific
+      el.contentEditable = true;
+      el.readOnly = false;
+      
+      // Select text
+      if (navigator.userAgent.match(/ipad|iphone/i)) {
+        // iOS requires a range
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        el.setSelectionRange(0, 999999);
+      } else {
+        el.select();
+        el.setSelectionRange(0, 999999);
+      }
+      
+      success = document.execCommand('copy');
+      document.body.removeChild(el);
+      
+      return success;
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
+      return false;
+    }
+  };
+
   const handleSlotContextMenu = async (e, date, time) => {
     e.preventDefault();
     
@@ -407,70 +457,89 @@ const App = () => {
     const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
     const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
     
-    // CRITICAL: Copy to clipboard BEFORE showing confirm dialog
-    // This ensures we have a valid user gesture context on mobile
+    // Desktop: Try async Clipboard API first, fallback to sync method
     let clipboardWorked = false;
     
-    // Try modern Clipboard API first
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(phoneNumbersOnly);
         clipboardWorked = true;
       } catch (err) {
         console.error('Clipboard API failed:', err);
+        clipboardWorked = copyToClipboardSync(phoneNumbersOnly);
       }
+    } else {
+      clipboardWorked = copyToClipboardSync(phoneNumbersOnly);
     }
     
-    // Fallback to execCommand for older browsers/contexts
-    if (!clipboardWorked) {
-      try {
-        const el = document.createElement('textarea');
-        el.value = phoneNumbersOnly;
-        el.setAttribute('readonly', '');
-        el.style.position = 'absolute';
-        el.style.left = '-9999px';
-        el.style.opacity = '0';
-        document.body.appendChild(el);
-        
-        // For iOS Safari
-        el.contentEditable = 'true';
-        el.readOnly = false;
-        
-        // Create selection range
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        el.setSelectionRange(0, 999999);
-        
-        clipboardWorked = document.execCommand('copy');
-        
-        document.body.removeChild(el);
-        
-        // Clear selection
-        selection.removeAllRanges();
-      } catch (err) {
-        console.error('execCommand failed:', err);
-      }
-    }
-    
-    // Show confirm dialog AFTER clipboard copy
     const confirmMsg = clipboardWorked 
-      ? `Phone numbers copied to clipboard!\n\nClick OK to open your Messages app with a pre-filled message, then paste the phone numbers.\n\nRecipients: ${phoneList}`
-      : `Send to:\n${phoneList}\n\nClick OK to open Messages app with pre-filled message.`;
+      ? `✓ Phone numbers copied!\n\n${phoneList}\n\nClick OK to open Messages app, then paste the numbers.`
+      : `Send to:\n${phoneList}\n\nClick OK to open Messages app.`;
     
     if (confirm(confirmMsg)) {
       window.location.href = 'sms:?body=' + encodeURIComponent(message);
     }
   };
 
-  const handleSlotTouchStart = (date, time) => {
+  const handleSlotTouchStart = (e, date, time) => {
+    // Copy to clipboard IMMEDIATELY on touchstart to preserve user gesture
+    // This is the only way to make clipboard work reliably on mobile
+    
+    if (!currentChild || !isCurrentChildAvailable(date, time)) {
+      return null;
+    }
+    
+    const availableKids = getAvailableChildren(date, time);
+    if (availableKids.length < 2) {
+      return null;
+    }
+
+    const timeRange = findConsecutiveTimeRange(date, time);
+    if (!timeRange) {
+      return null;
+    }
+
+    const otherKidsWithPhones = timeRange.children.filter(c => c.phone);
+    if (otherKidsWithPhones.length === 0) {
+      return null;
+    }
+
+    // Copy to clipboard NOW while we have user gesture context
+    const phoneNumbersOnly = otherKidsWithPhones.map(c => c.phone).join(', ');
+    const clipboardSuccess = copyToClipboardSync(phoneNumbersOnly);
+    
+    // Store data for later use in the timeout
+    const contextData = {
+      date,
+      time,
+      timeRange,
+      otherKidsWithPhones,
+      phoneNumbersOnly,
+      clipboardSuccess
+    };
+    
+    // Now set up the delayed action (for long-press detection)
     const touchTimer = setTimeout(() => {
-      handleSlotContextMenu({ preventDefault: () => {} }, date, time);
+      showSMSConfirmation(contextData);
     }, 500);
     
     return touchTimer;
+  };
+
+  const showSMSConfirmation = (contextData) => {
+    const { date, timeRange, otherKidsWithPhones, clipboardSuccess } = contextData;
+    
+    const message = `Hi all! The play date scheduler shows that our kids are all available from ${timeRange.startTime}-${timeRange.endTime} on ${formatDateFull(date)}. Let me know if that timeframe still works for everyone & we can set something up.`;
+    
+    const phoneList = otherKidsWithPhones.map(c => `${c.name}: ${c.phone}`).join('\n');
+    
+    const confirmMsg = clipboardSuccess 
+      ? `✓ Phone numbers copied!\n\n${phoneList}\n\nClick OK to open Messages app, then paste the numbers.`
+      : `Send to:\n${phoneList}\n\nClick OK to open Messages app.`;
+    
+    if (confirm(confirmMsg)) {
+      window.location.href = 'sms:?body=' + encodeURIComponent(message);
+    }
   };
 
   const saveDateRange = async () => {
@@ -807,7 +876,7 @@ const App = () => {
                             <button
                               onClick={() => toggleSlot(date, slot.time)}
                               onContextMenu={(e) => handleSlotContextMenu(e, date, slot.time)}
-                              onTouchStart={() => { slotTouchTimer = handleSlotTouchStart(date, slot.time); }}
+                              onTouchStart={(e) => { slotTouchTimer = handleSlotTouchStart(e, date, slot.time); }}
                               onTouchEnd={() => clearTimeout(slotTouchTimer)}
                               onTouchMove={() => clearTimeout(slotTouchTimer)}
                               title={kidNames || 'No children available'}
