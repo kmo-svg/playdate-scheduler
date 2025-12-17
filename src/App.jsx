@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Settings, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, Users, Settings, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App = () => {
@@ -13,6 +13,7 @@ const App = () => {
   const [tempStartDate, setTempStartDate] = useState('');
   const [tempEndDate, setTempEndDate] = useState('');
   const [saveStatus, setSaveStatus] = useState(''); // 'saving', 'saved', or ''
+  const scrollContainerRef = useRef(null);
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -209,6 +210,16 @@ const App = () => {
       const key = `${date}-${slot.time}`;
       return currentChild.availability[key];
     });
+  };
+
+  const scrollSchedule = (direction) => {
+    if (scrollContainerRef.current) {
+      const scrollAmount = 300; // pixels to scroll
+      scrollContainerRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
   };
 
   const addChild = async () => {
@@ -500,8 +511,29 @@ const App = () => {
                   </span>
                 )}
               </div>
+
+              {/* Scroll buttons for desktop */}
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => scrollSchedule('left')}
+                  className="p-2 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
+                  title="Scroll left"
+                >
+                  <ChevronLeft className="w-5 h-5 text-purple-700" />
+                </button>
+                <div className="flex-1 text-center text-sm text-gray-600">
+                  Use arrow buttons or swipe to navigate dates
+                </div>
+                <button
+                  onClick={() => scrollSchedule('right')}
+                  className="p-2 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
+                  title="Scroll right"
+                >
+                  <ChevronRight className="w-5 h-5 text-purple-700" />
+                </button>
+              </div>
               
-              <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
+              <div ref={scrollContainerRef} className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-20 bg-white">
                   <tr>
